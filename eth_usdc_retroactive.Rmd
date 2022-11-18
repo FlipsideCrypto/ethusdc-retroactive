@@ -1,0 +1,354 @@
+---
+title: "eth-usdc-DL"
+author: "Charliemarketplace"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Intro
+
+This is an exhaustive review of the historical divergent loss (DL) of the ETH-USDC 0.05% Uniswap v3 pool.
+As of a block height of 15,576,600 (September 20, 2022) it reviews *all* changes in liquidity, trades in the pool, and accumulated fees to identify the profit and loss of every unique position. 
+
+# Data Collection 
+
+The `collect_data.R` script included in this repo uses the Flipside Crypto's shroomDK API to pull all the relevant data. For brevity, this markdown reads from a saved RDS copy *not* available in the repo. To reproduce this analysis, you can run the `collect_data.R` script using your own shroomDK API key available for free. The script is duplicated but not run here.
+
+```{r, eval = FALSE}
+library(shroomDK)
+
+# duplication of collect_data.R
+
+lp_actions <- auto_paginate_query(
+  query = "
+  SELECT 
+  BLOCK_NUMBER, BLOCK_TIMESTAMP,
+  TX_HASH, ACTION,
+  NF_TOKEN_ID,
+   AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED,
+  LIQUIDITY,
+  TOKEN0_SYMBOL, TOKEN1_SYMBOL,
+  TICK_LOWER, TICK_UPPER,
+  PRICE_LOWER_0_1, PRICE_UPPER_0_1,
+  LIQUIDITY_PROVIDER,
+  NF_POSITION_MANAGER_ADDRESS
+  FROM ethereum.uniswapv3.ez_lp_actions
+                    WHERE POOL_ADDRESS = '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640' AND 
+                    BLOCK_NUMBER <= 15576600
+                    ORDER BY BLOCK_NUMBER DESC
+  ",
+  api_key = readLines("api_key.txt")
+)
+
+fees <- auto_paginate_query(
+  query = "
+  SELECT
+  BLOCK_NUMBER, BLOCK_TIMESTAMP,
+  TX_HASH, NF_TOKEN_ID, 
+  AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED,
+  TICK_LOWER, TICK_UPPER,
+  PRICE_LOWER, PRICE_UPPER,
+  LIQUIDITY_PROVIDER,
+  NF_POSITION_MANAGER_ADDRESS
+  FROM ethereum.uniswapv3.ez_position_collected_fees
+                    WHERE POOL_ADDRESS = '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640' AND 
+                    BLOCK_NUMBER <= 15576600
+                    ORDER BY BLOCK_NUMBER DESC
+  ",
+  api_key = readLines("api_key.txt")
+)
+
+
+swap_spreads <- c(12370000, 13370000, 14370000, 14870000, 15370000, 15576600)
+swaps <- list()
+for(i in 1:5){
+  swap_query <- "
+  SELECT
+  BLOCK_NUMBER, BLOCK_TIMESTAMP,
+  TX_HASH,
+  TICK, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED,
+  PRICE_1_0, PRICE_0_1
+  FROM     ethereum.uniswapv3.ez_swaps
+                    WHERE POOL_ADDRESS = '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640' AND 
+                    BLOCK_NUMBER > min_block
+                    AND 
+                    BLOCK_NUMBER <= max_block
+                    ORDER BY BLOCK_NUMBER DESC
+  "
+  swap_query <- gsub("min_block", swap_spreads[i], swap_query)
+  swap_query <- gsub("max_block", swap_spreads[i+1], swap_query)
+
+  swaps[[i]] <- auto_paginate_query(
+  query = swap_query,
+  api_key = readLines("api_key.txt")
+)
+}
+
+all_swaps <- do.call(rbind, swaps)
+
+# R Save Format 
+saveRDS(lp_actions, "lp_actions.rds")
+saveRDS(fees, "fees.rds")
+saveRDS(all_swaps, "all_swaps.rds")
+
+```
+
+```{r}
+library(gmp) # large numbers
+library(reactable) # clean tables
+library(plotly) # graphs
+library(dplyr) # data manipulation
+
+all_swaps <- readRDS("all_swaps.rds")
+lp_actions <- readRDS("lp_actions.rds")
+fees <- readRDS("fees.rds")
+source("key_functions.R")
+```
+
+The data includes: 
+
+- `r nrow(all_swaps)` rows of swaps.
+- `r nrow(lp_actions)` rows of liquidity pool actions.
+- `r nrow(fees)` rows of fees.
+
+# Understanding AMMs
+
+Using an automatic buying and selling strategy is not guaranteed to result in profit. If you 
+sell growing tokens to buy stable or losing tokens; it should be expected that you're worse off for doing so.
+Of course, with perfect information, nobody would do this. It is precisely because we don't know 
+future prices that people take the *risk* of buying and selling tokens. Or more specifically for Uniswap v3, 
+providing *liquidity* between 2 tokens (Automatic Market Making, "AMM").
+
+Looking at ETH-USDC for example. We generally take for granted that 1 USDC = $1. We also know 
+that ETH is a highly volatile asset. What we all want to do is sell ETH when it is relatively high, let the price fall, re-buy it when it is relatively low, let the price go up, and repeat the process. Uniswap v3 allows us to do that at a micro-scale.
+
+Automatic market making in Uniswap matches individual traders to a pool of liquidity providers. If 1 ETH is $1600 
+on Coinbase, and only 1,550 USDC on Uniswap, a trader can buy 1 ETH from us and sell on Coinbase to profit. We earn a fee for selling our ETH to the trader, here, 0.05% * 1,550 = 0.775 USDC, in the ETH-USDC 0.05% pool.
+
+Similarly, if 1 ETH is \$1500 on Coinbase and 1,550 USDC on Uniswap, the trader can buy from Coinbase and sell to us for a profit. We earn a fee for *selling our USDC* to the trader, here, 0.05% * 1 ETH = 0.0005 ETH.
+
+We take a cut of the token the user *gives us* (sells to us).
+
+Of course, what would be ideal would be to go to Coinbase and close the price gap ourselves and earn the 
+\$50 instead of the 0.775 USDC. But that's not the goal of Uni v3. In practice, professional traders make 
+trades at much tighter ranges than \$1600 and \$1550.
+
+The logic of Uniswap v3 us instead of trading between two fixed prices (e.g., \$1600 and \$1550) trade between *any* set of prices, no matter how close together they are (e.g., \$1550.00 and $1550.01) and charge a fee (e.g., 0.05%) to your counter party.
+
+If 10 people have 1 ETH each; and 10 people have 1,550 USDC each; and all 20 people want the other token; and all 20 people are happy with a conversion rate of 1 ETH <-> 1,550 USDC. They can pair up and swap. 
+
+Central exchanges like Coinbase charge a fee to both parties (maker & taker fees) and pairs them up anonymously via an *order book* (a list of who is selling what and the price they find acceptable).
+
+Uniswap lets them all go to the liquidity pool and make their trades anonymously through us the liquidity providers (automatic market making instead of an order book). 
+
+Coinbase profits by charging fees (let's say 0.25%) on all parties, resulting in Coinbase getting 0.025 ETH and $38.75 for the 10 swaps in our example for the service of matching them.
+
+Uniswap is a bit more complicated, here is a breakdown for a real swap:
+
+![Example Uniswap Trade Screen](trade_breakdown.png){height="50%" width="50%"}
+
+- A: The market price is 1 ETH = 1,211.63 USDC at time of screenshot.
+- B: The *expected* amount is the amount of USDC after fees & price impact. Uniswap uses a formula
+called 'constant product' to slowly change the price as a swap is happening, i.e., selling inherently reduces
+the price of what is being sold. This is different than an order book like Coinbase.
+- C: Because other people may be using the pool at the same time as you, and transactions are bundled into blocks your transaction may not be first in the block to sell into this pool. Slippage is the maximum loss you're willing to take from being later to use the pool than expected.
+
+On Coinbase, you'd make an order to sell 1 ETH = 1,211.63 USD and assuming they can match you to someone looking to buy 1 ETH for 1,211.63 USD, you'd receive 1,208.60 after the maker fee (assuming 0.25%). 
+
+On Uniswap, you'd sell your ETH to the *always-available* pool for an expected 1,210.35 USDC. Technically tolerating as low as 1,207.33. You can choose to tolerate less slippage at the risk of your transaction failing.
+
+In our example of 20 people holding 10 ETH and 15,550 USDC; they would all line up in *some order* and trade their assets to the pool. Depending on that order, some may receive different prices than others. If all the ETH people go first, the 10th ETH will get less than 1,550 USDC (see price impact above). If all the USDC people go first,
+the 10th batch of 1,550 USDC will get less than 1 ETH. The order matters within liquidity pools.
+
+The difference between order books and AMMs is important. Liquidity providers make a big commitment:
+buy and sell either asset at any price; in exchange they get *paid* fees instead of paying (taker) fees on an exchange. Traders get a big benefit: a pool of automatic buyers available 24/7; at a specific cost: They have to tolerate some amount of price impact and slippage due to how blockchains work.
+
+# Understanding Divergent Loss 
+
+When depositing into a Uniswap v3 liquidity pool you set a few parameters. 
+
+![Example Uniswap Liquidity Pool Screen](lp_breakdown.png){height="50%" width="50%"}
+
+- A: A fee tier. How much you want to charge for liquidity. Higher fees earn more per trade, but may get less trade requests and volume overall.
+- B: Your *range*. The easiest way to think about ranges is to remember that automatic market makers sell winners 
+to buy losers and charge a fee for doing so. Outside your range you have sold all your winners and are 100% in the losing asset. So when ETH is 1,200 USDC each; you will be 100% in ETH. When ETH is 1,206 USDC you will be 100% in USDC. 
+
+Said another way, 1 ETH = 1,206 USDC is *more USDC* than 1 ETH = 1,200 USDC. So 1 ETH = 1,206 USDC is *winning for ETH* and thus, you will have sold all your ETH at and above this price. Inversing the numbers,  1 USDC = 1/1200 ETH is *more ETH* than 1 USDC = 1/1206 ETH, thus, 1 USDC = 1/1200 ETH is *winning for USDC* and thus you will sell
+all your USDC at or above this price.
+
+- C: Your amounts of each token; but note that given a specific range, the current price, and the amount of 1 token: the amount of the 2nd token is deterministic. You can't set all 4 {amount 1, amount 2, min price, max price} to your choosing; you set 3 and the 4th must align to defined math. Functions like `match_tokens_to_range()`; `price_all_tokens()`; and `get_closest_tick()` are available to assist for more technical users.
+
+Getting a little more technical: each pool has data it tracks. 
+
+![ETH-USDC 0.05% Liquidity Pool Contract](technical_price_breakdown.png){height="50%" width="50%"}
+
+```{r}
+eth_per_usdc = sqrtpx96_to_price('2283275642461286221315706952235748')
+decimal_adjustment = 1e18/1e6 # ETH has 18 decimals; USDC has 6 decimals
+usdc_per_eth = (eth_per_usdc/decimal_adjustment)^-1
+```
+
+- A: The current price of the pool in 160 bit integer terms. This needs to be adjusted for 
+any decimal differences after being converted by the `sqrtpx96_to_price()` function. Click 
+code above to see this in detail. The ETH price stated here is 1 ETH = `r usdc_per_eth` USDC.
+- B: The Token 0 of the pool, here, USDC.
+- C: The Token 1 of the pool, here, wrapped ETH.
+
+Price in uniswap is *always* Token 1 / Token 0 with decimal adjustment. When the price goes UP 
+that means more Token 1 is available per Token 0. When price goes DOWN that means less Token 1 is available
+per Token 0. 
+
+Thinking in terms of ETH per USDC can be annoying, especially with having to adjust for differences in the decimals of each token. But it is an important skill for understanding Uniswap v3.
+
+Because liquidity providers automatically buy losers and sell winners within their range, one of two things is possible:
+
+- The fees accumulated are larger than value difference of the winners you sold and losers you bought.
+- The fees accumulated are *not* larger than the value difference, and thus, you would have been better off *not* providing liquidity.
+
+The goal for a liquidity provider is to ultimately profit like an order book. In the 20 people example above, liquidity providers hope that the traders alternate. Alice sells 1 ETH for 1,549.225 USDC; pool charges 0.05% of her ETH before trading. Bob sells 1,550 USDC for 0.9995 ETH; the pool charges 0.05% of his USDC before trading. Repeating the process through all 10 pairs to end up at *the same price* (1 ETH = 1,550 USDC) and {0.005 ETH; 7.75 USDC}  fees accumulated.
+
+But what if the trades were imbalanced? What if Alice sold 1 ETH for 1,549.225 USDC and nobody did the reverse? The total pool would be reduced by 1,549.225 USDC and increased by 1 ETH {0.0005 ETH from fee + 0.9995 ETH from the trade}.
+
+Well remember, selling an asset *reduces* its price. Imagine we provided liquidity with 10 ETH and 10,000 USDC (note these are *NOT* balanced in prices because it depends on our range).
+
+If we pulled our deposit out we would have 10 + {0.0005 * our liquidity / all liquidity} ETH and 
+10,000 - {X} USDC, where X < 1,549.225 because *others* contributed to USDC she took with her.
+
+If {0.0005 * our liquidity / all liquidity} ETH is *worth less* than {X} USDC, we are a net loser!
+This is divergent loss.
+
+## Divergent Loss Technical Example 
+
+Bob has 100,000 USDC and 100 ETH; the current price is 1200 USDC per ETH (note this is not compliant 
+with the pool's ETH per USDC pricing). He sets his minimum price such that at $1000 USDC per ETH he is 100% 
+in ETH. Using `price_all_tokens()` and setting `yx = FALSE` because we're pricing in Token 0 / Token 1 instead
+of the contract's preferred 1 / 0 results in the following:
+
+```{r}
+bob_balance = list(
+  usdc = 100000,
+  eth = 100
+)
+
+price = 1200 # USDC per ETH
+min_price  = 1000 # be 100% ETH at this price 
+
+# what range allows bob to put *all* his tokens in 
+
+bobs_allocation <- price_all_tokens(x = bob_balance[['usdc']],
+                 y = bob_balance[['eth']], 
+                 P = 1200, 
+                 pa = 1000,  
+                 yx = FALSE) # These prices are in X per Y, function can handle it.
+
+reactable(
+  as.data.frame(bobs_allocation)
+)
+```
+ 
+To get all 100000 of his USDC (x, i.e., Token 0) and 100 ETH (y, i.e., Token 1) at the current price
+1200 and minimum price 1000 requires he set his max price to roughly 1496.59 USDC per ETH.
+
+This results in the following amount of liquidity:
+
+```{r}
+
+# Gotta use 1e12 to match contract 
+bobs_liquidity <- get_liquidity(x = bob_balance$usdc * 1e12, # decimal adjust the USDC
+                                y = bob_balance$eth * 1e18, # decimal adjust the ETH 
+                                P = 1200,
+                                pa = 1000,
+                                pb = 1496.59,
+                                yx = FALSE)
+
+reactable(
+  data.frame(
+    liquidity = as.character(bobs_liquidity)
+  )
+)
+
+```
+
+For a variety of reasons, Uniswap makes optimizations that can look unintuitive. Here, this 
+liquidity is tracked as the square root of liquidity. Also, the long price is actually the sqrt of price
+in unsigned integer 160 bit form. Don't worry about interpreting the numbers for now.
+
+Given that Bob has a minimum price, let's identify the ETH sale size that would move him to his minimum
+price.
+
+```{r}
+# Adjusting for price requires both inversion to ETH/USDC for & decimal adjustment  
+sqrtpx96 = price_to_sqrtpx96(1200^-1 * (1e18/1e6))
+min_px96 = price_to_sqrtpx96(1000^-1 * (1e18/1e6))
+
+max_eth_sale = size_price_change_in_tick(L = bobs_liquidity,
+                          sqrtpx96 = sqrtpx96, 
+                          sqrtpx96_target = min_px96,
+                          dx = FALSE,  # tell us the Y (ETH) change to get to the new price
+                          decimal_adjustment = 1e18)
+
+```
+
+```{r}
+
+
+# Since it is only Bob's liquidity, we don't need to worry about cross-tick swaps.
+swap_within_tick(L = bobs_liquidity, 
+                 sqrtpx96 =  sqrtpx96, 
+                 dx = NULL, # Not selling USDC 
+                 dy = 1,    # selling 1 ETH 
+                 decimal_x = 1e6, # USDC has 6 decimals 
+                 decimal_y = 1e18, # ETH has 18 
+                 fee =  0.0005) # 0.05% pool
+
+```
+
+
+
+
+
+# Analysis
+
+## Quirks to Know
+
+### Event Emission Quirks for Uni v3 Vaults
+
+
+### Issues with Liquidity Provider depending on Wallet Type
+
+
+## Completely Closed Positions 
+
+
+### Identifying a Closed Position 
+
+
+### Closed Positions at Block Height
+
+
+### Realized Gain/Loss of Closed Positions
+
+
+## Open Positions
+
+
+### Identifying an Open Position
+
+
+### Open Positions at Block Height
+
+
+### Divergent Loss of Open Positions as of Block Height 
+
+
+

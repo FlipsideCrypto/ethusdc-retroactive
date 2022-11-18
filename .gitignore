@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 api_key.txt
+*.rds
+*.html
+question_on_fee_tbl_Collect_without_remove_is_where.txt
