@@ -1,5 +1,7 @@
 library(shroomDK)
 
+# LP Actions 
+
 lp_actions <- auto_paginate_query(
   query = "
   SELECT 
@@ -21,6 +23,9 @@ lp_actions <- auto_paginate_query(
   api_key = readLines("api_key.txt")
 )
 
+# Collected Fees
+ # Known Issue where Closure of positions mix withdrawn tokens as if they were collected fees
+ # subtraction will be sorted out 
 fees <- auto_paginate_query(
   query = "
   SELECT
@@ -39,7 +44,7 @@ fees <- auto_paginate_query(
   api_key = readLines("api_key.txt")
 )
 
-
+# Large swap history 
 swap_spreads <- c(12370000, 13370000, 14370000, 14870000, 15370000, 15576600)
 swaps <- list()
 for(i in 1:5){
@@ -67,8 +72,27 @@ for(i in 1:5){
 
 all_swaps <- do.call(rbind, swaps)
 
+# Historical ETH prices at all LP_ACTIONS blocks
+
+min_block = min(lp_actions$BLOCK_NUMBER) - 101
+
+blocks = c(min_block, min_block + 1e6, 
+           min_block + 2e6, min_block + 3e6, 
+           min_block + 4e6)
+
+eth_price <- list()
+for(i in 1:length(blocks)){
+eth_price[[i]]  <- get_eth_price(min_block = blocks[i],
+                                 max_block = blocks[i] + 1e6, 
+                                 api_key = readLines('api_key.txt'))
+  
+}
+
+all_eth_prices <- do.call(rbind, eth_price)
+all_eth_prices <- all_eth_prices[order(all_eth_prices$BLOCK_NUMBER),]
+
 # R Save Format 
 saveRDS(lp_actions, "lp_actions.rds")
 saveRDS(fees, "fees.rds")
 saveRDS(all_swaps, "all_swaps.rds")
-
+saveRDS(unique(all_eth_prices), "eth_prices.rds")

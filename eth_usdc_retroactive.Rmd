@@ -96,10 +96,30 @@ for(i in 1:5){
 
 all_swaps <- do.call(rbind, swaps)
 
+# Historical ETH prices at all LP_ACTIONS blocks
+
+min_block = min(lp_actions$BLOCK_NUMBER) - 101
+
+blocks = c(min_block, min_block + 1e6, 
+           min_block + 2e6, min_block + 3e6, 
+           min_block + 4e6)
+
+eth_price <- list()
+for(i in 1:length(blocks)){
+eth_price[[i]]  <- get_eth_price(min_block = blocks[i],
+                                 max_block = blocks[i] + 1e6, 
+                                 api_key = readLines('api_key.txt'))
+  
+}
+
+all_eth_prices <- do.call(rbind, eth_price)
+
 # R Save Format 
 saveRDS(lp_actions, "lp_actions.rds")
 saveRDS(fees, "fees.rds")
 saveRDS(all_swaps, "all_swaps.rds")
+saveRDS(unique(all_eth_prices), "eth_prices.rds")
+
 
 ```
 
@@ -112,6 +132,8 @@ library(dplyr) # data manipulation
 all_swaps <- readRDS("all_swaps.rds")
 lp_actions <- readRDS("lp_actions.rds")
 fees <- readRDS("fees.rds")
+eth_prices <- readRDS("eth_prices.rds")
+eth_prices <- eth_prices[order(eth_prices$BLOCK_NUMBER),]
 source("key_functions.R")
 ```
 
@@ -181,7 +203,7 @@ When depositing into a Uniswap v3 liquidity pool you set a few parameters.
 
 - A: A fee tier. How much you want to charge for liquidity. Higher fees earn more per trade, but may get less trade requests and volume overall.
 - B: Your *range*. The easiest way to think about ranges is to remember that automatic market makers sell winners 
-to buy losers and charge a fee for doing so. Outside your range you have sold all your winners and are 100% in the losing asset. So when ETH is 1,200 USDC each; you will be 100% in ETH. When ETH is 1,206 USDC you will be 100% in USDC. 
+to buy losers and charge a fee for doing so. Outside your range you have sold all your winners and are 100% in the losing asset. So when ETH is 1,200 USDC each; you will be 100% in ETH. When ETH is 1,206 USDC you will be 100% in USDC.
 
 Said another way, 1 ETH = 1,206 USDC is *more USDC* than 1 ETH = 1,200 USDC. So 1 ETH = 1,206 USDC is *winning for ETH* and thus, you will have sold all your ETH at and above this price. Inversing the numbers,  1 USDC = 1/1200 ETH is *more ETH* than 1 USDC = 1/1206 ETH, thus, 1 USDC = 1/1200 ETH is *winning for USDC* and thus you will sell
 all your USDC at or above this price.
@@ -252,7 +274,7 @@ bobs_allocation <- price_all_tokens(x = bob_balance[['usdc']],
                  yx = FALSE) # These prices are in X per Y, function can handle it.
 
 reactable(
-  as.data.frame(bobs_allocation)
+  as.data.frame(bobs_allocation) %>% round(., 2)
 )
 ```
  
@@ -263,7 +285,7 @@ This results in the following amount of liquidity:
 
 ```{r}
 
-# Gotta use 1e12 to match contract 
+# 1e18 decimals for ETH / 1e6 decimals for USDC = 1e12 scalar factor for USDC. 
 bobs_liquidity <- get_liquidity(x = bob_balance$usdc * 1e12, # decimal adjust the USDC
                                 y = bob_balance$eth * 1e18, # decimal adjust the ETH 
                                 P = 1200,
@@ -297,58 +319,318 @@ max_eth_sale = size_price_change_in_tick(L = bobs_liquidity,
                           dx = FALSE,  # tell us the Y (ETH) change to get to the new price
                           decimal_adjustment = 1e18)
 
+reactable(
+  data.frame(
+    num_eth_to_move_price_to_min = max_eth_sale
+  ) %>% round(., 2)
+)
 ```
+
+As long as the number of ETH sold to the pool is less than this amount, bob's liquidity
+will remain active making it easy to calculate trades within Bob's liquidity. Let's do a 5 ETH sale into 
+Bob's liquidity.
 
 ```{r}
 
-
 # Since it is only Bob's liquidity, we don't need to worry about cross-tick swaps.
-swap_within_tick(L = bobs_liquidity, 
-                 sqrtpx96 =  sqrtpx96, 
-                 dx = NULL, # Not selling USDC 
-                 dy = 1,    # selling 1 ETH 
-                 decimal_x = 1e6, # USDC has 6 decimals 
-                 decimal_y = 1e18, # ETH has 18 
-                 fee =  0.0005) # 0.05% pool
+swap5eth <- swap_within_tick(L = bobs_liquidity, 
+                             sqrtpx96 =  sqrtpx96, 
+                             dx = NULL, # Not selling USDC 
+                             dy = 5,    # selling 1 ETH 
+                             decimal_x = 1e6, # USDC has 6 decimals 
+                             decimal_y = 1e18, # ETH has 18 
+                             fee =  0.0005) # 0.05% pool
+
+# convert to USDC/ETH for ease of viewing
+reactable(
+  data.frame(
+    eth_taken = swap5eth$dy,
+    usdc_added = -1*swap5eth$dx,
+    eth_fee_earned = swap5eth$fee, 
+    original_price = sqrtpx96_to_price(swap5eth$price1)^-1 * 1e12, # 1e18/1e6 = 1e12
+    final_price = sqrtpx96_to_price(swap5eth$price2)^-1 * 1e12, # 1e18/1e6 = 1e12
+    avg_price = (-1 * swap5eth$dx)/swap5eth$dy
+  ) %>% round(., 4)
+) 
 
 ```
 
+Is Bob better or worse off for having done this trade?
 
+He went from 100,000 USDC and 100 ETH at a 1200 USDC/ETH price to `r 100000 + -1*swap5eth$dx` USDC 
+and `r 100 - swap5eth$dy` ETH (including the fee) at a final price of 1187.557 USDC/ETH.
 
+Long term, this better or worse off question would rely on the *market* price of ETH, not just this pool 
+price. If ETH is available on central exchanges, other decentralized exchanges, or even other Uniswap pools 
+at better prices than arbitragers would gladly give ETH back to him and take USDC. Bob earning a cut of fees every time.
 
+But in this short term let's compare just the effect of this one trade: 
+
+```{r}
+
+reactable(
+  data.frame(
+    original_usdc = 100000,
+    original_eth = 100,
+    original_price = 1200,
+    original_usdc_value = 100000 + 1200*100,
+    original_eth_value = 100 + 100000/1200
+  ) %>% round(., 2)
+)
+
+reactable(
+  data.frame(
+ new_usdc = 100000 + -1*swap5eth$dx,
+    new_eth = 100 - swap5eth$dy,
+    new_price = 1187.557,
+    new_usdc_value = 100000 + -1*swap5eth$dx + (100 - swap5eth$dy) * 1187.557,
+    new_eth_value = (100 - swap5eth$dy) + (100000 + -1*swap5eth$dx)/ 1187.557
+  ) %>% round(., 4)
+)
+
+```
+
+Whether Bob is better or worse off technically depends on perspective. In ETH terms he is up 
+`r 184.23 - 183.3333` ETH; but in USD terms he is down `r 220000 - 218786.71` USDC. One could
+even argue he paid `r (220000 - 218786.71)/(184.23 - 183.3333)` USDC per ETH by providing this liquidity, much more than the average price.
+
+This is because of *price impact*, selling ETH reduces ETH's price. Bob is relying on (1) 
+more traders doing the trade in reverse (selling USDC and taking ETH off his hands) and (2) 
+accumulating fees that exceed any of this loss in value.
+
+For now, let's use USD terms and say his divergent loss (sometimes called 'impermanent loss' because 
+trades in reverse give him fees while putting the price back to where it was) at this point in time is 
+`r -1* (220000 - 218786.71)` USDC.
+
+Note something interesting: Without price impact in
+the other direction (this number here: `r (220000 - 218786.71)/(184.23 - 183.3333)`), if Bob were to withdraw everything and go to a central exchange where ETH can be sold for 1200 USDC, he would *still* be at a loss in both USDC AND ETH terms.
+
+```{r}
+reactable(
+    data.frame(
+        new_usdc = 100000 + -1*swap5eth$dx,
+        new_eth = 100 - swap5eth$dy,
+        central_exchange_price = 1200,
+        cex_usdc_value = 100000 + -1*swap5eth$dx + (100 - swap5eth$dy) * 1200,
+        cex_eth_value = (100 - swap5eth$dy) + (100000 + -1*swap5eth$dx)/ 1200
+    ) %>% round(., 4)
+)
+```
+
+It is important to not overfocus on this small example as indicative of a liquidity provider's experience on Uniswap v3. In the real world, Bob's liquidity would be part of one of the largest pools in Uniswap; 5 ETH would have minimal price impact; and he would only have his balance of tokens change (and fees accumulated) proportional to the liquidity he provides. In addition, numerous trades in both directions would acumulate fees while negating price movements that increase divergent loss.
+
+This is just a small toy example to understand the theory, in the next section we'll look 
+at the historical positions in 1 ETH-USDC pool to understand *realized* gains and losses adjusting for changes in token balance and fees collected by the NFT position.
 
 # Analysis
 
-## Quirks to Know
+## Quirks Identifying Positions
 
-### Event Emission Quirks for Uni v3 Vaults
+Uniswap liquidity pools are (most often) held via ERC721 NFTs minted via an NFT Position Manager.
 
+Some protocols with custom NFT Position Managers won't use the Uniswap one and will thus be 
+lacking in a Non-fungible Token ID (NF Token ID).
 
-### Issues with Liquidity Provider depending on Wallet Type
+Of the `r nrow(lp_actions)` rows in the weth-usdc liquidity pool actions history up to 
+block height 15,576,600, there are only `r length(unique(lp_actions$LIQUIDITY_PROVIDER)`
+ unique liquidity providers recorded. This is because the the Uni v3 NFT Contract 
+`0xc36442b4a4522e871399cd717abdd847ab11fe88` is the deliverer of tokens for most positions.
 
+Thus the best way to identify a *unique* position are: 
 
-## Completely Closed Positions 
+- If an NFT Token ID is available, use the token ID as a unique identifier.
+- Otherwise, because the token ID will be NA, concatenate the liquidity provider, lower price and upper price of position (or more specifically lower *tick* and upper *tick*) as a unique position.
 
+Here is an example row of the LP Actions table transposed to break down.
+
+```{r}
+reactable(
+  t(lp_actions[1, ])
+)
+```
+
+At a given BLOCK_NUMBER and BLOCK_TIMESTAMP, there was a specific TX_HASH. In this transaction,
+the liquidity ACTION for the position was `DECREASE_LIQUIDITY`. The position with its liquidity lowered was 
+position `317705` and the AMOUNT0_ADJUSTED (USDC) was `26442.68` while the AMOUNT1_ADJUSTED was 
+`14.6205`. The LIQUIDITY is a large number `2.0122 * 10^16` and the tokens, again, are TOKEN0_SYMBOL `USDC` and TOKEN1_SYMBOL `WETH`.
+
+Position `317705` represents liquidity deposited in the range of TICK_LOWER `203740` and 
+`205010`. Notice TICK_LOWER is a smaller number than TICK_UPPER. Some Uniswap v3 pools will have negative
+values for these ticks; whether ticks are positive or negative depends on whether 1 unit of TOKEN0 or TOKEN1 is worth more. PRICE_LOWER_0_1 and PRICE_UPPER_0_1 are the ticks converted into USDC/ETH price for easier readability; technically the contract uses TOKEN1/TOKEN0 for internal pricing.
+
+The LIQUIDITY_PROVIDER is most often the NFT Contract due to quirks in the events emitted from the contract (NFTs are transferable so it is the NFT that is important not any individual depositor of liquidity). The NF_POSITION_MANAGER_ADDRESS is also most often the NFT Contract, but in cases here the NF_TOKEN_ID is missing, this will be NA, requiring us to use LIQUIDITY_PROVIDER-TICK_LOWER-TICK_UPPER as a unique identifier for those positions.
+
+## Completely Closed Positions
+
+When depositing into a position, you provide a certain amount if LIQUIDITY. This amount is fixed.
+No matter the price movements within the pool, your amount of LIQUIDITY is fixed unless you INCREASE or DECREASE your liquidity (adding or removing assets to the same position).
+
+This is why Uniswap v3 is so revolutionary compared to other decentralized exchanges, given the same amount of assets you can *concentrate* your liquidity to increase the share of fee revenue you earn. What is less obvious 
+is that as price moves, the more narrow your range, the faster you sell your share of an asset.
+
+Using the Bob example above, if he was 1 of many liquidity positions, the 5 ETH sale would not have reduced his position by 4.9975 ETH and increased it by 5,965.8278 USDC. It would have reduced it by less ETH as a fraction of his liquidity relative to all the available liquidity that includes the prices (original price 1200 USDC/ETH to 1187.557 USDC/ETH).
+
+Given any particular price it is possible to assess the each positions allocation of assets if it is known how much liquidity they provided and the range they provided that liquidity. But it is not tracked and emitted by the contract every block.
+
+This is partially why changes in his absolute value (e.g., his total USDC value changing from 220,000 to 218786.7117) are often called *impermanent* loss - because trades in the other direction change this value. 
+Until Bob withdraws his liquidity, the fraction of his assets in USDC and ETH are changing with every trade. What stays the same is the liquidity he provides.
+
+Thus, this analysis will focus on *realized* profit or loss. Someone puts liquidity with 2 tokens in a range at Time [1]. The later, they remove their liquidity and get 2 tokens at Time [2]. Differences in the amount of tokens received (both from the price changes and from fees accumulated) and the market price determine whether the person has profited or lost relative to *not having deposited liquidity at all*.
 
 ### Identifying a Closed Position 
 
+To identify a closed position is pretty simple: 
+
+- For each unique position (NF Token ID or liquidity_provider-tick_lower-tick_upper)
+- Add all increases of liquidity
+- Subtract all decreases of liquidity
+- If the sum of changes is 0, the position is closed!
 
 ### Closed Positions at Block Height
 
+```{r}
+lp_actions$unique_id <- lp_actions$NF_TOKEN_ID
 
-### Realized Gain/Loss of Closed Positions
+make_id <- function(row){
+ row$unique_id <- paste0(row$LIQUIDITY_PROVIDER,"-", row$TICK_LOWER,"-",row$TICK_UPPER)
+ return(row)
+}
+
+custom_index <- which(is.na(lp_actions$unique_id))
+
+lp_actions[custom_index, "unique_id"] <- paste0(lp_actions[custom_index, "LIQUIDITY_PROVIDER"],
+                                                "-",
+                                                lp_actions[custom_index, "TICK_LOWER"],
+                                                "-",
+                                                lp_actions[custom_index, "TICK_UPPER"])
+
+# remove DECREASE_LIQUIDITY where LIQUIDITY == 0 
+# this is just a collect fees action. Fees will be identified separately
+lp_actions_only_add_removes <- lp_actions %>% filter(
+  LIQUIDITY != 0
+)
+
+```
+
+Of the `r nrow(lp_actions_only_add_removes)` where liquidity is added or removed (some rows are decreases of 0 liquidity, which is how the contract notes fees are collected) there are `r length(unique(unique(lp_actions_only_add_removes$unique_id)))` unique 
+positions.
+
+```{r}
+
+liquidity_at_timestamp <- lp_actions %>% mutate(
+  liquidity_signed = ifelse(ACTION == "DECREASE_LIQUIDITY", LIQUIDITY * -1, LIQUIDITY)
+) %>% group_by(unique_id) %>% 
+  summarise(sumliq = sum(liquidity_signed))
+
+# due to some large number precision errors, some liquidity may be technically negative 
+# but effectively 0 for our purposes.
+closed_positions <- liquidity_at_timestamp %>% filter(sumliq <= 0)
+
+```
+
+Of the `r length(unique(liquidity_at_timestamp$unique_id))` unique positions, 
+`r length(unique(closed_positions$unique_id))` are closed as of the timestamp.
+
+Let's look at the exact token deposits, token withdrawals, and accumulated fees 
+alongside the *relevant* market prices of the tokens (price at deposit time, and price of assets at closure)
+to identify the real exact gains and losses!
+
+## Realized Gain/Loss of Closed Positions
+
+### Reference Price
+
+As shown with Bob's example where the pool price after a trade can differ from the central exchange price of assets, different markets will generally have different prices. To characterize this, we don't use the pool 
+price at the block level to determine the market value, instead a volume-time-weighted average price at the block level is constructed from the major ETH-Stablecoin Uniswap v3 pools to better proxy the price of assets
+that any liquidity depositor *could* sell their tokens at instead of depositing the tokens in Uniswap's ETH-USDC 0.05% pool.
+
+The following method is used to assess the *cost basis* of each liquidity pool deposit.
+
+ - Given the Block where liquidity was added or removed, the previous 100 blocks (~20 minutes) have all their stablecoin trades (ETH-USDC 0.05%, 0.3%, 1%; ETH-DAI 0.3%, ETH-USDT 0.05%, 0.3%) averaged weighted by volume.
+ - Assuming each stablecoin is exactly = 1 dollar, the median of volume weighted price is used get a single market price at the block level. This smooths large spikes in single pool pricing which are likely not representative of broader market volatility.
+ 
+ 
+```{r}
+
+market_eth_price_at_block <- function(eth_prices, block){
+ eth_prices %>% filter(BLOCK_NUMBER < block & BLOCK_NUMBER >= (block - 100)) %>% 
+    summarise(median(ETH_WAVG_PRICE)) %>% as.numeric()
+}
+
+```
+
+For example, the market price at block 15000000 would be `r market_eth_price_at_block(eth_prices, 15000000)` USD.
+
+### Reference (HODL) value 
+
+We treat 1 USDC as always equal to $1 and assess realized profit or loss as: 
+
+- Cost Basis = [ETH Market Price at Block of Deposit] * [Amount ETH Deposited] + [Amount USDC Deposited]
+- Realized Revenue = [ETH Market Price at Block of Withdrawal] * [Amount of ETH Withdrawn] + Amount USDC Withdrawn]
+ - Fee Revenue = [ETH Market Price Block at Final Withdrawal] * [Amount of ETH Fees Accumulated] + [Amount USDC Fees Accumulated]
+
+Profit = Fee Revenue + Withdrawal(s) - Cost Basis(es)
+
+Note, when Fees are collected and redeposited into the position, double counting is avoided
+by adding a new cost basis.
+
+A clarifying example: 
+
+1. 1 ETH and 1000 USDC are added to a new position
+2. The position accumulates 0.1 ETH and 100 USDC in fees
+3. The fees are withdrawn
+4. The fees are added to the pool; this is treated as a new deposit at a new cost basis.
+5. The position accumulates another 0.05 ETH and 50 USDC in fees
+6. The fees are withdrawn, no new deposit is made.
+7. All liquidity is withdrawn and due to price changes the amounts withdrawn are 0.5 ETH and 2000 USDC 
+
+The accounting for this position would be: 
+
+1 ETH & 1000 USDC deposited at cost basis [1]
+0.1 ETH and 100 USDC deposited at cost basis [2]
+0.5 ETH and 2000 USDC withdrawn at Withdrawal prices [3]
+0.15 ETH and 150 USDC total fees accumulated at Withdrawal prices [3] 
+
+This looks different from the more simple {Out - In} accounting, but gets to the same 
+result in [ETH USDC] format: 
+
+Fee Revenue + Withdrawal - Cost Basis [1] - Cost Basis [2] = [ETH_profit USDC_profit]
+
+[0.15, 150] + [0.5, 2000] - [1, 1000] - [0.1, 100] = [-0.45, 1050]
+
+This is the same result as looking at simple in/out: 
+
+[1.1, 1100] [ETH USDC] go in; [0.65, 2150] come out
+
+Out - In: 
+
+[0.65, 2150] - [1.1, 1100] = [-0.45, 1050]
+
+The difference in accounting is important as it more accurately allows for single unit of account
+measures (i.e., USD) of value gained or lost; and better comparison of the opportunity cost (holding 
+the original deposit(s) without ever participating in the liquidity pool). 
+
+One could argue that a specific deposit (here, fees being redeposited) should be excluded if it wouldn't have been earned from holding the original deposit (the HODL reference); instead of an opinionated view on where cost basis comes from, we use total fees accumulated at the withdrawal price to act as an adjustment to this amount, since technically, deposits could have come from anywhere and the choice to deposit fees is no different from the choice to deposit any other tokens.
+
+## Resulting value with fees
+
+### Adjusting Collected Fees
 
 
-## Open Positions
 
 
-### Identifying an Open Position
 
 
-### Open Positions at Block Height
 
 
-### Divergent Loss of Open Positions as of Block Height 
+
+
+
+
+
+
+
+
+
 
 
 
