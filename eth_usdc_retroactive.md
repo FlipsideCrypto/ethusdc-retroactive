@@ -1,7 +1,7 @@
 ---
 title: "eth-usdc-DL"
 author: "Charliemarketplace"
-date: "`r Sys.Date()`"
+date: "2022-11-30"
 output:
   html_document: 
     code_folding: hide
@@ -21,7 +21,8 @@ As of a block height of 15,576,600 (September 20, 2022) it reviews *all* changes
 
 The `collect_data.R` script included in this repo uses the Flipside Crypto's shroomDK API to pull all the relevant data. For brevity, this markdown reads from a saved RDS copy *not* available in the repo. To reproduce this analysis, you can run the `collect_data.R` script using your own shroomDK API key available for free. The script is duplicated but not run here.
 
-```{r, eval = FALSE}
+
+```r
 library(shroomDK)
 
 # duplication of collect_data.R
@@ -116,11 +117,10 @@ saveRDS(lp_actions, "lp_actions.rds")
 saveRDS(fees, "fees.rds")
 saveRDS(all_swaps, "all_swaps.rds")
 saveRDS(unique(all_eth_prices), "eth_prices.rds")
-
-
 ```
 
-```{r, message = FALSE, warning = FALSE}
+
+```r
 library(gmp) # large numbers
 library(reactable) # clean tables
 library(plotly) # graphs
@@ -137,9 +137,9 @@ source("key_functions.R")
 
 The data includes: 
 
-- `r nrow(all_swaps)` rows of swaps.
-- `r nrow(lp_actions)` rows of liquidity pool actions.
-- `r nrow(fees)` rows of fees.
+- 2972274 rows of swaps.
+- 78303 rows of liquidity pool actions.
+- 38612 rows of fees.
 
 # Understanding AMMs
 
@@ -212,7 +212,8 @@ Getting a little more technical: each pool has data it tracks.
 
 ![ETH-USDC 0.05% Liquidity Pool Contract](technical_price_breakdown.png){height="50%" width="50%"}
 
-```{r}
+
+```r
 eth_per_usdc = sqrtpx96_to_price('2283275642461286221315706952235748')
 decimal_adjustment = 1e18/1e6 # ETH has 18 decimals; USDC has 6 decimals
 usdc_per_eth = (eth_per_usdc/decimal_adjustment)^-1
@@ -220,7 +221,7 @@ usdc_per_eth = (eth_per_usdc/decimal_adjustment)^-1
 
 - A: The current price of the pool in 160 bit integer terms. This needs to be adjusted for 
 any decimal differences after being converted by the `sqrtpx96_to_price()` function. Click 
-code above to see this in detail. The ETH price stated here is 1 ETH = `r usdc_per_eth` USDC.
+code above to see this in detail. The ETH price stated here is 1 ETH = 1204.0443388 USDC.
 - B: The Token 0 of the pool, here, USDC.
 - C: The Token 1 of the pool, here, wrapped ETH.
 
@@ -254,7 +255,8 @@ with the pool's ETH per USDC pricing). He sets his minimum price such that at $1
 in ETH. Using `price_all_tokens()` and setting `yx = FALSE` because we're pricing in Token 0 / Token 1 instead
 of the contract's preferred 1 / 0 results in the following:
 
-```{r}
+
+```r
 bob_balance = list(
   usdc = 100000,
   eth = 100
@@ -275,14 +277,19 @@ reactable(
   as.data.frame(bobs_allocation) %>% round(., 2)
 )
 ```
+
+```{=html}
+<div id="htmlwidget-2a23930b2aedfb6029cc" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-2a23930b2aedfb6029cc">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"amount_x":[100000],"amount_y":[100],"current_price":[1200],"min_price":[1000],"max_price":[1496.59]},"columns":[{"accessor":"amount_x","name":"amount_x","type":"numeric"},{"accessor":"amount_y","name":"amount_y","type":"numeric"},{"accessor":"current_price","name":"current_price","type":"numeric"},{"accessor":"min_price","name":"min_price","type":"numeric"},{"accessor":"max_price","name":"max_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"49d5d0d3dc9a1afed1179a4486a3aed3"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+```
  
 To get all 100000 of his USDC (x, i.e., Token 0) and 100 ETH (y, i.e., Token 1) at the current price
 1200 and minimum price 1000 requires he set his max price to roughly 1496.59 USDC per ETH.
 
 This results in the following amount of liquidity:
 
-```{r}
 
+```r
 # 1e18 decimals for ETH / 1e6 decimals for USDC = 1e12 scalar factor for USDC. 
 bobs_liquidity <- get_liquidity(x = bob_balance$usdc * 1e12, # decimal adjust the USDC
                                 y = bob_balance$eth * 1e18, # decimal adjust the ETH 
@@ -296,7 +303,11 @@ reactable(
     liquidity = as.character(bobs_liquidity)
   )
 )
+```
 
+```{=html}
+<div id="htmlwidget-81914a9370176585ebdd" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-81914a9370176585ebdd">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"liquidity":["33131896376530724"]},"columns":[{"accessor":"liquidity","name":"liquidity","type":"character"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"5e06dd11b79814f22100ff8313ec1668"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 For a variety of reasons, Uniswap makes optimizations that can look unintuitive. Here, this 
@@ -306,7 +317,8 @@ in unsigned integer 160 bit form. Don't worry about interpreting the numbers for
 Given that Bob has a minimum price, let's identify the ETH sale size that would move him to his minimum
 price.
 
-```{r}
+
+```r
 # Adjusting for price requires both inversion to ETH/USDC for & decimal adjustment  
 sqrtpx96 = price_to_sqrtpx96(1200^-1 * (1e18/1e6))
 min_px96 = price_to_sqrtpx96(1000^-1 * (1e18/1e6))
@@ -324,12 +336,17 @@ reactable(
 )
 ```
 
+```{=html}
+<div id="htmlwidget-cdf912b74502a3eb58c7" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-cdf912b74502a3eb58c7">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"num_eth_to_move_price_to_min":[91.56]},"columns":[{"accessor":"num_eth_to_move_price_to_min","name":"num_eth_to_move_price_to_min","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d0d3484c8221d360729c80a9cedb1c6c"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+```
+
 As long as the number of ETH sold to the pool is less than this amount, bob's liquidity
 will remain active making it easy to calculate trades within Bob's liquidity. Let's do a 5 ETH sale into 
 Bob's liquidity.
 
-```{r}
 
+```r
 # Since it is only Bob's liquidity, we don't need to worry about cross-tick swaps.
 swap5eth <- swap_within_tick(L = bobs_liquidity, 
                              sqrtpx96 =  sqrtpx96, 
@@ -350,13 +367,17 @@ reactable(
     avg_price = (-1 * swap5eth$dx)/swap5eth$dy
   ) %>% round(., 4)
 ) 
+```
 
+```{=html}
+<div id="htmlwidget-09d1b011689a0b617af4" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-09d1b011689a0b617af4">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"eth_taken":[4.9975],"usdc_added":[5965.8278],"eth_fee_earned":[0.0025],"original_price":[1200],"final_price":[1187.5573],"avg_price":[1193.7624]},"columns":[{"accessor":"eth_taken","name":"eth_taken","type":"numeric"},{"accessor":"usdc_added","name":"usdc_added","type":"numeric"},{"accessor":"eth_fee_earned","name":"eth_fee_earned","type":"numeric"},{"accessor":"original_price","name":"original_price","type":"numeric"},{"accessor":"final_price","name":"final_price","type":"numeric"},{"accessor":"avg_price","name":"avg_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d3abf8af8a8a50aab8dd846230d38a8e"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 Is Bob better or worse off for having done this trade?
 
-He went from 100,000 USDC and 100 ETH at a 1200 USDC/ETH price to `r 100000 + -1*swap5eth$dx` USDC 
-and `r 100 - swap5eth$dy` ETH (including the fee) at a final price of 1187.557 USDC/ETH.
+He went from 100,000 USDC and 100 ETH at a 1200 USDC/ETH price to 105965.8277721 USDC 
+and 95.0025 ETH (including the fee) at a final price of 1187.557 USDC/ETH.
 
 Long term, this better or worse off question would rely on the *market* price of ETH, not just this pool 
 price. If ETH is available on central exchanges, other decentralized exchanges, or even other Uniswap pools 
@@ -364,8 +385,8 @@ at better prices than arbitragers would gladly give ETH back to him and take USD
 
 But in this short term let's compare just the effect of this one trade: 
 
-```{r}
 
+```r
 reactable(
   data.frame(
     original_usdc = 100000,
@@ -375,7 +396,14 @@ reactable(
     original_eth_value = 100 + 100000/1200
   ) %>% round(., 2)
 )
+```
 
+```{=html}
+<div id="htmlwidget-d35dc8967f68751357b2" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-d35dc8967f68751357b2">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"original_usdc":[100000],"original_eth":[100],"original_price":[1200],"original_usdc_value":[220000],"original_eth_value":[183.33]},"columns":[{"accessor":"original_usdc","name":"original_usdc","type":"numeric"},{"accessor":"original_eth","name":"original_eth","type":"numeric"},{"accessor":"original_price","name":"original_price","type":"numeric"},{"accessor":"original_usdc_value","name":"original_usdc_value","type":"numeric"},{"accessor":"original_eth_value","name":"original_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"7acc16a636e21731866461a8f3823e23"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+```
+
+```r
 reactable(
   data.frame(
  new_usdc = 100000 + -1*swap5eth$dx,
@@ -385,12 +413,16 @@ reactable(
     new_eth_value = (100 - swap5eth$dy) + (100000 + -1*swap5eth$dx)/ 1187.557
   ) %>% round(., 4)
 )
+```
 
+```{=html}
+<div id="htmlwidget-6776f5d786461068dfbf" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-6776f5d786461068dfbf">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"new_usdc":[105965.8278],"new_eth":[95.0025],"new_price":[1187.557],"new_usdc_value":[218786.7117],"new_eth_value":[184.2326]},"columns":[{"accessor":"new_usdc","name":"new_usdc","type":"numeric"},{"accessor":"new_eth","name":"new_eth","type":"numeric"},{"accessor":"new_price","name":"new_price","type":"numeric"},{"accessor":"new_usdc_value","name":"new_usdc_value","type":"numeric"},{"accessor":"new_eth_value","name":"new_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"b45bed13653044cb2f14c314b21bc5b9"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 Whether Bob is better or worse off technically depends on perspective. In ETH terms he is up 
-`r 184.23 - 183.3333` ETH; but in USD terms he is down `r 220000 - 218786.71` USDC. One could
-even argue he paid `r (220000 - 218786.71)/(184.23 - 183.3333)` USDC per ETH by providing this liquidity, much more than the average price.
+0.8967 ETH; but in USD terms he is down 1213.29 USDC. One could
+even argue he paid 1353.0612245 USDC per ETH by providing this liquidity, much more than the average price.
 
 This is because of *price impact*, selling ETH reduces ETH's price. Bob is relying on (1) 
 more traders doing the trade in reverse (selling USDC and taking ETH off his hands) and (2) 
@@ -398,12 +430,13 @@ accumulating fees that exceed any of this loss in value.
 
 For now, let's use USD terms and say his divergent loss (sometimes called 'impermanent loss' because 
 trades in reverse give him fees while putting the price back to where it was) at this point in time is 
-`r -1* (220000 - 218786.71)` USDC.
+-1213.29 USDC.
 
 Note something interesting: Without price impact in
-the other direction (this number here: `r (220000 - 218786.71)/(184.23 - 183.3333)`), if Bob were to withdraw everything and go to a central exchange where ETH can be sold for 1200 USDC, he would *still* be at a loss in both USDC AND ETH terms.
+the other direction (this number here: 1353.0612245), if Bob were to withdraw everything and go to a central exchange where ETH can be sold for 1200 USDC, he would *still* be at a loss in both USDC AND ETH terms.
 
-```{r}
+
+```r
 reactable(
     data.frame(
         new_usdc = 100000 + -1*swap5eth$dx,
@@ -413,6 +446,11 @@ reactable(
         cex_eth_value = (100 - swap5eth$dy) + (100000 + -1*swap5eth$dx)/ 1200
     ) %>% round(., 4)
 )
+```
+
+```{=html}
+<div id="htmlwidget-587bc61e5ba7e0f2daeb" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-587bc61e5ba7e0f2daeb">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"new_usdc":[105965.8278],"new_eth":[95.0025],"central_exchange_price":[1200],"cex_usdc_value":[219968.8278],"cex_eth_value":[183.3074]},"columns":[{"accessor":"new_usdc","name":"new_usdc","type":"numeric"},{"accessor":"new_eth","name":"new_eth","type":"numeric"},{"accessor":"central_exchange_price","name":"central_exchange_price","type":"numeric"},{"accessor":"cex_usdc_value","name":"cex_usdc_value","type":"numeric"},{"accessor":"cex_eth_value","name":"cex_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"fd77a53702e5a1fa85cfb197472aad4c"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 It is important to not overfocus on this small example as indicative of a liquidity provider's experience on Uniswap v3. In the real world, Bob's liquidity would be part of one of the largest pools in Uniswap; 5 ETH would have minimal price impact; and he would only have his balance of tokens change (and fees accumulated) proportional to the liquidity he provides. In addition, numerous trades in both directions would acumulate fees while negating price movements that increase divergent loss.
@@ -429,8 +467,8 @@ Uniswap liquidity pools are (most often) held via ERC721 NFTs minted via an NFT 
 Some protocols with custom NFT Position Managers won't use the Uniswap one and will thus be 
 lacking in a Non-fungible Token ID (NF Token ID).
 
-Of the `r nrow(lp_actions)` rows in the weth-usdc liquidity pool actions history up to 
-block height 15,576,600, there are only `r length(unique(lp_actions$LIQUIDITY_PROVIDER))`
+Of the 78303 rows in the weth-usdc liquidity pool actions history up to 
+block height 15,576,600, there are only 75
  unique liquidity providers recorded. This is because the the Uni v3 NFT Contract 
 `0xc36442b4a4522e871399cd717abdd847ab11fe88` is the deliverer of tokens for most positions.
 
@@ -441,10 +479,16 @@ Thus the best way to identify a *unique* position are:
 
 Here is an example row of the LP Actions table transposed to break down.
 
-```{r}
+
+```r
 reactable(
   t(lp_actions[1, ])
 )
+```
+
+```{=html}
+<div id="htmlwidget-ad6bc6640b627eea6f9b" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-ad6bc6640b627eea6f9b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{".rownames":["BLOCK_NUMBER","BLOCK_TIMESTAMP","TX_HASH","ACTION","NF_TOKEN_ID","AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED","LIQUIDITY","TOKEN0_SYMBOL","TOKEN1_SYMBOL","TICK_LOWER","TICK_UPPER","PRICE_LOWER_0_1","PRICE_UPPER_0_1","LIQUIDITY_PROVIDER","NF_POSITION_MANAGER_ADDRESS"],"1":["15576594","2022-09-20 18:52:23.000","0xffa417a20a9c10fc997cc19d2066774f5e0c81038fdc565a1b91698526b728f8","DECREASE_LIQUIDITY","317705","26442.68","14.6205","20122745034548508","USDC","WETH","203740","205010","1250.184","1419.471","0xc36442b4a4522e871399cd717abdd847ab11fe88","0xc36442b4a4522e871399cd717abdd847ab11fe88"]},"columns":[{"accessor":".rownames","name":"","type":"character","sortable":false,"filterable":false,"rowHeader":true},{"accessor":"1","name":"1","type":"character"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d5c5a64cdafda4530f426c1e5fcfa6b6"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 At a given BLOCK_NUMBER and BLOCK_TIMESTAMP, there was a specific TX_HASH. In this transaction,
@@ -486,7 +530,8 @@ To identify a closed position is pretty simple:
 
 ### Closed Positions at Block Height
 
-```{r}
+
+```r
 lp_actions$unique_id <- lp_actions$NF_TOKEN_ID
 
 make_id <- function(row){
@@ -516,14 +561,13 @@ fees[custom_index,"unique_id"] <- paste0(fees[custom_index, "LIQUIDITY_PROVIDER"
 lp_actions_only_add_removes <- lp_actions %>% filter(
   LIQUIDITY != 0
 )
-
 ```
 
-Of the `r nrow(lp_actions_only_add_removes)` where liquidity is added or removed (some rows are decreases of 0 liquidity, which is how the contract notes fees are collected) there are `r length(unique(unique(lp_actions_only_add_removes$unique_id)))` unique 
+Of the 69952 where liquidity is added or removed (some rows are decreases of 0 liquidity, which is how the contract notes fees are collected) there are 29965 unique 
 positions.
 
-```{r}
 
+```r
 liquidity_at_timestamp <- lp_actions %>% mutate(
   liquidity_signed = ifelse(ACTION == "DECREASE_LIQUIDITY", LIQUIDITY * -1, LIQUIDITY)
 ) %>% group_by(unique_id) %>% 
@@ -532,11 +576,10 @@ liquidity_at_timestamp <- lp_actions %>% mutate(
 # due to some large number precision errors, some liquidity may be technically negative 
 # but effectively 0 for our purposes.
 closed_positions <- liquidity_at_timestamp %>% filter(sumliq <= 0)
-
 ```
 
-Of the `r length(unique(liquidity_at_timestamp$unique_id))` unique positions, 
-`r length(unique(closed_positions$unique_id))` are closed as of the timestamp.
+Of the 32972 unique positions, 
+30322 are closed as of the timestamp.
 
 Let's look at the exact token deposits, token withdrawals, and accumulated fees 
 alongside the *relevant* market prices of the tokens (price at deposit time, and price of assets at closure)
@@ -556,16 +599,15 @@ The following method is used to assess the *cost basis* of each liquidity pool d
  - Assuming each stablecoin is exactly = 1 dollar, the median of volume weighted price is used get a single market price at the block level. This smooths large spikes in single pool pricing which are likely not representative of broader market volatility.
  
  
-```{r}
 
+```r
 market_eth_price_at_block <- function(eth_prices, block){
  eth_prices %>% filter(BLOCK_NUMBER < block & BLOCK_NUMBER >= (block - 100)) %>% 
     summarise(median(ETH_WAVG_PRICE)) %>% as.numeric()
 }
-
 ```
 
-For example, the market price at block 15000000 would be `r market_eth_price_at_block(eth_prices, 15000000)` USD.
+For example, the market price at block 15000000 would be 1119.6319272 USD.
 
 ### Profit & Loss
 
@@ -628,7 +670,8 @@ To fix this, when a `DECREASE_LIQUIDITY` ACTION is identified in the same TX_HAS
 
 [Fee_ETH, Fee_USDC] = [Collected_ETH, Collected_USDC] - [Withdrawn_ETH, Withdrawn_USDC]
 
-```{r}
+
+```r
 p96877 <- lp_actions %>% filter(NF_TOKEN_ID == 96877) %>% 
   select(BLOCK_NUMBER, TX_HASH, 
          ACTION, AMOUNT0_ADJUSTED, 
@@ -644,16 +687,15 @@ p96877 <- lp_actions %>% filter(NF_TOKEN_ID == 96877) %>%
 f96877 <- fees %>% filter(NF_TOKEN_ID == 96877) %>% 
   select(BLOCK_NUMBER, TX_HASH, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED) %>% 
   arrange(BLOCK_NUMBER)
-    
 ```
 
-Looking at position `96877` there are `r sum(p96877$ACTION == 'INCREASE_LIQUIDITY')`
-deposits actions at blocks: `r p96877[p96877$ACTION == 'INCREASE_LIQUIDITY', "BLOCK_NUMBER"]`
+Looking at position `96877` there are 2
+deposits actions at blocks: 12901945, 12915974
 
-There are `r sum(p96877$ACTION == 'DECREASE_LIQUIDITY')` withdrawal actions at blocks: 
-`r p96877[p96877$ACTION == 'DECREASE_LIQUIDITY', "BLOCK_NUMBER"]`.
+There are 3 withdrawal actions at blocks: 
+13084868, 13090533, 13133732.
 
-There are `r nrow(f96877)` fee collections with `r sum(f96877$TX_HASH %in% p96877$TX_HASH)`
+There are 11 fee collections with 3
 fee collections happening at the same time as an LP Action transaction.
 
 Because Uniswap v3's contract judges `collect()` to include the entire amount of 
@@ -666,28 +708,47 @@ fees and/or withdrawal selective adjustment must be made.
 An similar but not technically equal effect would be to simply remove LP_ACTIONS that are 
 already in the fees table. 
 
-```{r}
+
+```r
 reactable(
   p96877
 )
 ```
 
+```{=html}
+<div id="htmlwidget-1f1ad7a9e31b040ffdfb" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-1f1ad7a9e31b040ffdfb">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12901945,12915974,13084868,13090533,13133732],"TX_HASH":["0xa97fd5bccfe6be4218dc76927b2b841575584768ba24dfc5fec54c168ce8827f","0xf88d866c438df1cda9c78d249d06de0476ed94a906edbea4659e13984a13e902","0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"ACTION":["INCREASE_LIQUIDITY","INCREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY"],"AMOUNT0_ADJUSTED":[14425.157658,1571.881325,46430.211919,31389.105591,112012.823322],"AMOUNT1_ADJUSTED":[49.999999999,14.999999999,0.9983412426,1.802315677,0],"LIQUIDITY":[1.43104484423314e+16,3.99050626952081e+15,4.57523867796305e+15,3.43142900847229e+15,1.02942870254169e+16],"liquidity_signed":[1.43104484423314e+16,3.99050626952081e+15,-4.57523867796305e+15,-3.43142900847229e+15,-1.02942870254169e+16]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"ACTION","name":"ACTION","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"},{"accessor":"LIQUIDITY","name":"LIQUIDITY","type":"numeric"},{"accessor":"liquidity_signed","name":"liquidity_signed","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"0850d987136eaf86f0fa34943af41407"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+```
+
 The 3 rows of fees with a matching transaction in liquidity pool actions all have this 
 quirk where collection includes the withdrawal. 
 
-```{r}
+
+```r
 fee_tx_adjust <- f96877[f96877$TX_HASH %in% p96877$TX_HASH, ]
 withdraws_of_interest <- p96877 %>% filter(TX_HASH %in% fee_tx_adjust$TX_HASH)
 
 reactable(fee_tx_adjust)
-reactable(withdraws_of_interest)
+```
 
+```{=html}
+<div id="htmlwidget-5472404aa32bade1e79a" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-5472404aa32bade1e79a">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[13084868,13090533,13133732],"TX_HASH":["0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"AMOUNT0_ADJUSTED":[46639.687872,31476.059913,112416.257167],"AMOUNT1_ADJUSTED":[1.060363038,1.831116321,0.1235953108]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"cfe8b44a4b4f422b63a5e3e5744bacc1"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+```
+
+```r
+reactable(withdraws_of_interest)
+```
+
+```{=html}
+<div id="htmlwidget-93dc00587875e4a031ee" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-93dc00587875e4a031ee">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[13084868,13090533,13133732],"TX_HASH":["0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"ACTION":["DECREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY"],"AMOUNT0_ADJUSTED":[46430.211919,31389.105591,112012.823322],"AMOUNT1_ADJUSTED":[0.9983412426,1.802315677,0],"LIQUIDITY":[4.57523867796305e+15,3.43142900847229e+15,1.02942870254169e+16],"liquidity_signed":[-4.57523867796305e+15,-3.43142900847229e+15,-1.02942870254169e+16]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"ACTION","name":"ACTION","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"},{"accessor":"LIQUIDITY","name":"LIQUIDITY","type":"numeric"},{"accessor":"liquidity_signed","name":"liquidity_signed","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"48877aedcb9f9f89e347914b31cd374f"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 Adjusting for this would make the fee table look like this instead: 
 
-```{r}
 
+```r
 # if ALL matching transactions show fees collected > withdrawal amount for ALL tokens
 # remove withdrawal from collected to fix double counting. 
 
@@ -736,7 +797,11 @@ fee_correction <- function(id_fees, id_lp_actions){
 
 f96877 <- fee_correction(f96877, p96877)  
 reactable(f96877)
+```
 
+```{=html}
+<div id="htmlwidget-e8c55f7805742339f95b" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-e8c55f7805742339f95b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12930496,12950138,12968982,12984534,13001072,13021106,13046165,13071834,13084868,13090533,13133732],"TX_HASH":["0xbd296a4a4123d168dfe9909d43171aec4864e1563c939b7943971b08c07ad84b","0x284d6dc494b12978f68faa0d127db8eeff48a41979e774ff8a09e11db4a37a04","0xa653b26b2193107526d74c49ce70d8bd830b7e47622576a77f049701e409b841","0x19169700ef94d19b94a5afd5f3f6453c4f8f7a4a9f668b4502318a4b5800b0e6","0x608670cfbbc4573c28b67e4131425016fc7230568d107b331ccb7da6f5b7872a","0xdb7d67e5a41e67370fcb08a9a6aa991cec962906a8cfe3915ca8d9fb6e043d13","0xfea64782cb4d8f43e58ff8b463bf21b936507d98adb66e3bf7725b07ac222116","0x570b4155ee8eebe689afac919215f9ad173cf220b7d806707cf20ce92f1c3940","0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"AMOUNT0_ADJUSTED":[490.907193,555.965385,601.810994,535.102708,651.885902,513.093425,620.142785,511.728319,209.475953000001,86.9543220000014,403.433845000007],"AMOUNT1_ADJUSTED":[0.2056597131,0.2135533752,0.2220657761,0.1680713716,0.2106605617,0.1585465357,0.2019659304,0.157644449,0.0620217954,0.0288006440000002,0.1235953108]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"aa288ef81b05e4351ffa727916b1febd"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ## Accounting Table
@@ -745,8 +810,8 @@ With this final adjustment we can now perform the accounting for this position.
 The accounting table for position `96877` combines 2 deposits (made negative) showing 
 the cost basis; 3 withdrawals; and a single total fees row priced at the position closure.
 
-```{r}
 
+```r
 accounting <- function(id_lp_actions, id_fees, eth_prices){
   
   id_lp_actions$eth_price <- sapply(id_lp_actions$BLOCK_NUMBER, 
@@ -792,12 +857,16 @@ a96877 <- accounting(id_lp_actions = p96877, id_fees = f96877, eth_prices = eth_
 reactable(
   a96877
 )
+```
 
+```{=html}
+<div id="htmlwidget-98a2211f8054fa7244b7" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-98a2211f8054fa7244b7">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12901945,12915974,13084868,13090533,13133732,13133732],"accounting":["cost_basis","cost_basis","withdrawal","withdrawal","withdrawal","fee revenue"],"token0":[-14425.157658,-1571.881325,46430.211919,31389.105591,112012.823322,5180.50083100001],"token1":[-49.999999999,-14.999999999,0.9983412426,1.802315677,0,1.752585463],"eth_price":[2351.7957534095,2283.527849571,3333.870314001,3202.5723341435,3426.148502838,3426.148502838]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"accounting","name":"accounting","type":"character"},{"accessor":"token0","name":"token0","type":"numeric"},{"accessor":"token1","name":"token1","type":"numeric"},{"accessor":"eth_price","name":"eth_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"98b703f20619adee96f08f4315b7c14f"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 What should be clear is this position had a large net change from ETH to USDC. 
-They net gained `r sum(a96877$token0)` USDC and net lost `r sum(a96877$token1)` ETH 
-after fees. One could argue this is equivalent to selling their ETH for `r -1*sum(a96877$token0)/sum(a96877$token1)`
+They net gained 179015.60268 USDC and net lost -60.4467576 ETH 
+after fees. One could argue this is equivalent to selling their ETH for 2961.541855
 USD each, but a more accounting of their position would be in both USD and ETH terms.
 
 In USD terms, we multiply all token1 (ETH) by eth_price to get USD terms, then sum all values to get a 
@@ -807,26 +876,35 @@ In ETH terms, we divide all token0 (USDC) by eth_price to get ETH terms, then su
 
 ## Profit & Loss
 
-```{r}
+
+```r
 pnl_96877 <- data.frame(
   usd_terms = sum(a96877$token0, (a96877$token1*a96877$eth_price)),
   eth_terms = sum(a96877$token1, (a96877$token0/a96877$eth_price))
 )
 ```
 
-This results in a gain of `r pnl_96877$usd_terms` in USD terms. In ETH terms it is a loss 
-of `r pnl_96877$eth_terms`. This aligns to intuition as ETH's price rose between the cost basis blocks 
+This results in a gain of 42277.9018872 in USD terms. In ETH terms it is a loss 
+of -9.3351964. This aligns to intuition as ETH's price rose between the cost basis blocks 
 and the withdrawal blocks, so selling ETH for USDC is what any automatic market maker would do.
 
-```{r}
-reactable(pnl_96877)
 
+```r
+reactable(pnl_96877)
+```
+
+```{=html}
+<div id="htmlwidget-1fcbfbeb7a8a9390da04" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-1fcbfbeb7a8a9390da04">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"usd_terms":[42277.9018872488],"eth_terms":[-9.33519644654424]},"columns":[{"accessor":"usd_terms","name":"usd_terms","type":"numeric"},{"accessor":"eth_terms","name":"eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"9473ea01a6f1fe8a19082df0fad27252"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+```
+
+```r
 pnl_96877$usd_basis = a96877 %>% filter(accounting == 'cost_basis') %>% summarise(
   usd_cost_basis = abs(sum(token0, (token1*eth_price)))
 )
 ```
 
-In USD terms specifically, the gain is `r pnl_96877$usd_terms/pnl_96877$usd_basis * 100`% in roughly 40 days worth of blocks.
+In USD terms specifically, the gain is 25.1894461% in roughly 40 days worth of blocks.
 
 ## Opportunity Cost (HODL Reference Value)
 
@@ -840,8 +918,8 @@ that instead of judging positions directly against their HODL Reference Value, i
 To calculate a HODL Reference value, get all the accounting = `cost_basis` and use the eth_price 
 at the position's closing withdrawal to get the counterfactual: what would the position be worth if deposits were just held instead? (without any adjustment for deposits potentially coming from fees).
 
-```{r}
 
+```r
 hodl_reference <- function(id_accounting){
   
 price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)] 
@@ -857,7 +935,11 @@ id_accounting %>%
 reactable(
 hodl_reference(a96877)  
 )
+```
 
+```{=html}
+<div id="htmlwidget-2c31fb9c58be1c9e0e7d" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-2c31fb9c58be1c9e0e7d">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"hodl_usd_terms":[238696.691660618],"hodl_eth_terms":[69.6691026273078]},"columns":[{"accessor":"hodl_usd_terms","name":"hodl_usd_terms","type":"numeric"},{"accessor":"hodl_eth_terms","name":"hodl_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"194667cefa9227e81c66a9118f804c57"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ## Resulting Value (Strategy Reference Value)
@@ -867,7 +949,8 @@ get a strategy reference value, which is withdrawals + fee revenue using eth_pri
 of position closure. This is different from the profit and loss calculation (PnL) because PnL 
 takes into account changes in ETH's price.
 
-```{r}
+
+```r
 strategy_reference <- function(id_accounting){
   price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)] 
   
@@ -882,7 +965,11 @@ strategy_reference <- function(id_accounting){
 reactable(
   strategy_reference(a96877)
 )
+```
 
+```{=html}
+<div id="htmlwidget-39a4db4c7c743a640bb5" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-39a4db4c7c743a640bb5">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"strategy_usd_terms":[210612.726235204],"strategy_eth_terms":[61.4721533701022]},"columns":[{"accessor":"strategy_usd_terms","name":"strategy_usd_terms","type":"numeric"},{"accessor":"strategy_eth_terms","name":"strategy_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"ff783edee720c7a7c0bf29b77a5555ab"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 For this position, while the PnL was positive in USD terms, ETH's price growth over the time period 
@@ -895,10 +982,16 @@ is not broadly recommended because cost basis can come from anywhere.
 
 Here is the strategy reference minus hodl reference to show this *realized* divergent loss with fees.
 
-```{r}
+
+```r
 reactable(
 strategy_reference(a96877) - hodl_reference(a96877) 
 )
+```
+
+```{=html}
+<div id="htmlwidget-06e33f0d049ffe557f31" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-06e33f0d049ffe557f31">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"strategy_usd_terms":[-28083.9654254142],"strategy_eth_terms":[-8.19694925720565]},"columns":[{"accessor":"strategy_usd_terms","name":"strategy_usd_terms","type":"numeric"},{"accessor":"strategy_eth_terms","name":"strategy_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"b2217cdf4bfd4d4b892f30e66fc49a01"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 # Parallelize for all Positions 
@@ -913,10 +1006,9 @@ For everyone position we must go through the same steps as done for `96877`:
 
 ## Unique Identifer Problem 
 
-```{r}
+
+```r
 closed_lp_actions <- lp_actions[lp_actions$unique_id %in% closed_positions$unique_id, ]
-
-
 ```
 
 
