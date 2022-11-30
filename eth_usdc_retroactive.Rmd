@@ -422,7 +422,7 @@ It is important to not overfocus on this small example as indicative of a liquid
 This is just a small toy example to understand the theory, in the next section we'll look 
 at the historical positions in 1 ETH-USDC pool to understand *realized* gains and losses adjusting for changes in token balance and fees collected by the NFT position.
 
-# Analysis
+# Clarifications
 
 ## Quirks Identifying Positions
 
@@ -504,6 +504,15 @@ lp_actions[custom_index, "unique_id"] <- paste0(lp_actions[custom_index, "LIQUID
                                                 "-",
                                                 lp_actions[custom_index, "TICK_UPPER"])
 
+# while here do fees too
+fees$unique_id <- fees$NF_TOKEN_ID
+custom_index <- which(is.na(fees$unique_id))
+fees[custom_index,"unique_id"] <- paste0(fees[custom_index, "LIQUIDITY_PROVIDER"],
+                                                "-",
+                                                fees[custom_index, "TICK_LOWER"],
+                                                "-",
+                                                fees[custom_index, "TICK_UPPER"])
+
 # remove DECREASE_LIQUIDITY where LIQUIDITY == 0 
 # this is just a collect fees action. Fees will be identified separately
 lp_actions_only_add_removes <- lp_actions %>% filter(
@@ -560,7 +569,7 @@ market_eth_price_at_block <- function(eth_prices, block){
 
 For example, the market price at block 15000000 would be `r market_eth_price_at_block(eth_prices, 15000000)` USD.
 
-### Reference (HODL) value 
+### Profit & Loss
 
 We treat 1 USDC as always equal to $1 and assess realized profit or loss as: 
 
@@ -588,7 +597,7 @@ The accounting for this position would be:
 1 ETH & 1000 USDC deposited at cost basis [1]
 0.1 ETH and 100 USDC deposited at cost basis [2]
 0.5 ETH and 2000 USDC withdrawn at Withdrawal prices [3]
-0.15 ETH and 150 USDC total fees accumulated at Withdrawal prices [3] 
+0.15 ETH and 150 USDC total fees accumulated at position closure prices, which in this case is Withdrawal prices [3]
 
 This looks different from the more simple {Out - In} accounting, but gets to the same 
 result in [ETH USDC] format: 
@@ -609,11 +618,301 @@ The difference in accounting is important as it more accurately allows for singl
 measures (i.e., USD) of value gained or lost; and better comparison of the opportunity cost (holding 
 the original deposit(s) without ever participating in the liquidity pool). 
 
-One could argue that a specific deposit (here, fees being redeposited) should be excluded if it wouldn't have been earned from holding the original deposit (the HODL reference); instead of an opinionated view on where cost basis comes from, we use total fees accumulated at the withdrawal price to act as an adjustment to this amount, since technically, deposits could have come from anywhere and the choice to deposit fees is no different from the choice to deposit any other tokens.
+One could argue that a specific deposit (here, fees being redeposited) should be excluded if it wouldn't have been earned from holding the original deposit (the HODL reference); instead of an opinionated view on where cost basis comes from, we use total fees accumulated at the position closure price to act as an adjustment to this amount, since technically, deposits could have come from anywhere and the choice to deposit fees is no different from the choice to deposit any other tokens.
 
-## Resulting value with fees
+## Real Position 96877 
 
 ### Adjusting Collected Fees
+
+In transactions where fees are collected at the same time at the same time liquidity is removed, the removed liquidity is double counted as if they were fees in the data. 
+
+To fix this, when a `DECREASE_LIQUIDITY` ACTION is identified in the same TX_HASH as a Collected fee and the [AMOUNT0 AMOUNT1] of the lp_action >= [AMOUNT0 AMOUNT1] of collected fee, then:
+
+[Fee_ETH, Fee_USDC] = [Collected_ETH, Collected_USDC] - [Withdrawn_ETH, Withdrawn_USDC]
+
+```{r}
+p96877 <- lp_actions %>% filter(NF_TOKEN_ID == 96877) %>% 
+  select(BLOCK_NUMBER, TX_HASH, 
+         ACTION, AMOUNT0_ADJUSTED, 
+         AMOUNT1_ADJUSTED, 
+         LIQUIDITY) %>% 
+  mutate(liquidity_signed = ifelse(
+    ACTION == "DECREASE_LIQUIDITY", 
+    LIQUIDITY * -1,
+    LIQUIDITY)
+  ) %>% 
+  arrange(BLOCK_NUMBER)
+
+f96877 <- fees %>% filter(NF_TOKEN_ID == 96877) %>% 
+  select(BLOCK_NUMBER, TX_HASH, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED) %>% 
+  arrange(BLOCK_NUMBER)
+    
+```
+
+Looking at position `96877` there are `r sum(p96877$ACTION == 'INCREASE_LIQUIDITY')`
+deposits actions at blocks: `r p96877[p96877$ACTION == 'INCREASE_LIQUIDITY', "BLOCK_NUMBER"]`
+
+There are `r sum(p96877$ACTION == 'DECREASE_LIQUIDITY')` withdrawal actions at blocks: 
+`r p96877[p96877$ACTION == 'DECREASE_LIQUIDITY', "BLOCK_NUMBER"]`.
+
+There are `r nrow(f96877)` fee collections with `r sum(f96877$TX_HASH %in% p96877$TX_HASH)`
+fee collections happening at the same time as an LP Action transaction.
+
+Because Uniswap v3's contract judges `collect()` to include the entire amount of 
+fees and/or withdrawal selective adjustment must be made. 
+
+- If a fee collection happens in the same transaction as a `DECREASE_LIQUIDITY` ACTION
+- AND the fee [AMOUNT0, AMOUNT1] both exceed the withdrawal [AMOUNT0, AMOUNT1]
+- unbundle the fees from the withdrawal by subtracting the withdrawal from the fees collected.
+
+An similar but not technically equal effect would be to simply remove LP_ACTIONS that are 
+already in the fees table. 
+
+```{r}
+reactable(
+  p96877
+)
+```
+
+The 3 rows of fees with a matching transaction in liquidity pool actions all have this 
+quirk where collection includes the withdrawal. 
+
+```{r}
+fee_tx_adjust <- f96877[f96877$TX_HASH %in% p96877$TX_HASH, ]
+withdraws_of_interest <- p96877 %>% filter(TX_HASH %in% fee_tx_adjust$TX_HASH)
+
+reactable(fee_tx_adjust)
+reactable(withdraws_of_interest)
+
+```
+
+Adjusting for this would make the fee table look like this instead: 
+
+```{r}
+
+# if ALL matching transactions show fees collected > withdrawal amount for ALL tokens
+# remove withdrawal from collected to fix double counting. 
+
+fee_correction <- function(id_fees, id_lp_actions){
+  
+  fee_tx_in_lp = (id_fees$TX_HASH %in% id_lp_actions$TX_HASH)
+  lp_tx_in_fee = (id_lp_actions$TX_HASH %in% id_fees$TX_HASH)
+  amount_cols = c("AMOUNT0_ADJUSTED", "AMOUNT1_ADJUSTED")
+  
+  # if there are no tx hashes in both tables move on 
+  if(sum(fee_tx_in_lp) == 0){
+    return(id_fees)
+    
+  } else { 
+    # if it perfectly lines up that ALL tx hashes in 
+    # both tables have fees collected double counting withdrawals;
+    # fix by subtracting the double counting
+    # note: it is assumed transactions are ordered by block number for alignment to work
+    if( 
+      mean(id_fees[fee_tx_in_lp, amount_cols] > id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
+      
+      id_fees[fee_tx_in_lp, amount_cols] <- {
+        id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
+      }
+    
+      } else { 
+      # else go 1 by one to overlapping tx and check again
+      
+        for(i in id_fees$TX_HASH[fee_tx_in_lp]){
+          if(
+          mean(
+            id_fees[id_fees$TX_HASH == i, amount_cols] > 
+            id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+            ) == 1
+          ){
+            id_fees[id_fees$TX_HASH == i, amount_cols] <- {
+            id_fees[id_fees$TX_HASH == i, amount_cols]  - 
+          id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+            }
+          } else next()
+        }
+      }
+            return(id_fees)
+  }
+}
+
+f96877 <- fee_correction(f96877, p96877)  
+reactable(f96877)
+
+```
+
+### Accounting Table
+
+With this final adjustment we can now perform the accounting for this position.
+The accounting table for position `96877` combines 2 deposits (made negative) showing 
+the cost basis; 3 withdrawals; and a single total fees row priced at the position closure.
+
+```{r}
+
+accounting <- function(id_lp_actions, id_fees, eth_prices){
+  
+  id_lp_actions$eth_price <- sapply(id_lp_actions$BLOCK_NUMBER, 
+                                 market_eth_price_at_block, 
+                                 eth_prices = eth_prices)
+  
+  
+  # cost basis negative for subtraction 
+  cost_basis <- id_lp_actions %>% filter(ACTION == "INCREASE_LIQUIDITY") %>% 
+    mutate(
+      token0 = -1*AMOUNT0_ADJUSTED,
+      token1 = -1*AMOUNT1_ADJUSTED,
+      accounting = "cost_basis"
+    ) %>% 
+    select(BLOCK_NUMBER, accounting, token0, token1, eth_price)
+  
+  withdrawals <- id_lp_actions %>% filter(ACTION == "DECREASE_LIQUIDITY") %>% 
+        mutate(
+      token0 = AMOUNT0_ADJUSTED,
+      token1 = AMOUNT1_ADJUSTED,
+      accounting = "withdrawal"
+    ) %>% 
+    select(BLOCK_NUMBER, accounting, token0, token1, eth_price)
+  
+  fees <- data.frame(
+    BLOCK_NUMBER = max(withdrawals$BLOCK_NUMBER),
+    accounting = "fee revenue",
+    token0 = sum(id_fees$AMOUNT0_ADJUSTED),
+    token1 = sum(id_fees$AMOUNT1_ADJUSTED)
+  )
+  
+  # price fees at position closure
+  fees$eth_price <- market_eth_price_at_block(eth_prices, block = max(withdrawals$BLOCK_NUMBER))
+  
+  accounting_tbl <- rbind(cost_basis, withdrawals, fees)
+  
+  return(accounting_tbl)
+  
+}
+
+a96877 <- accounting(id_lp_actions = p96877, id_fees = f96877, eth_prices = eth_prices)
+
+reactable(
+  a96877
+)
+
+```
+
+What should be clear is this position had a large net change from ETH to USDC. 
+They net gained `r sum(a96877$token0)` USDC and net lost `r sum(a96877$token1)` ETH 
+after fees. One could argue this is equivalent to selling their ETH for `r -1*sum(a96877$token0)/sum(a96877$token1)`
+USD each, but a more accounting of their position would be in both USD and ETH terms.
+
+In USD terms, we multiply all token1 (ETH) by eth_price to get USD terms, then sum all values to get a 
+net gain in USD terms (this already takes into account the benefit of having done nothing, which is the negative cost basis).
+
+In ETH terms, we divide all token0 (USDC) by eth_price to get ETH terms, then sum all values to a net gain in ETH terms.
+
+### Profit & Loss
+
+```{r}
+pnl_96877 <- data.frame(
+  usd_terms = sum(a96877$token0, (a96877$token1*a96877$eth_price)),
+  eth_terms = sum(a96877$token1, (a96877$token0/a96877$eth_price))
+)
+```
+
+This results in a gain of `r pnl_96877$usd_terms` in USD terms. In ETH terms it is a loss 
+of `r pnl_96877$eth_terms`. This aligns to intuition as ETH's price rose between the cost basis blocks 
+and the withdrawal blocks, so selling ETH for USDC is what any automatic market maker would do.
+
+```{r}
+reactable(pnl_96877)
+
+pnl_96877$usd_basis = a96877 %>% filter(accounting == 'cost_basis') %>% summarise(
+  usd_cost_basis = abs(sum(token0, (token1*eth_price)))
+)
+```
+
+In USD terms specifically, the gain is `r pnl_96877$usd_terms/pnl_96877$usd_basis * 100`% in roughly 40 days worth of blocks.
+
+### Opportunity Cost (HODL Reference Value)
+
+Separate from direct Profit & Loss, there's the question of what *would* have been the value had the participant 
+never provided liquidity in the first place. This can be troublesome at the position level because users who re-invest
+fees will have a new cost basis that accrues fees and is withdrawn, counting revenue against a cost basis that *wouldn't have existed* had the position never accrued those fees in the first place.
+
+But, as previously stated, this analysis is unopinionated on the source of deposits as cost basis. We recommend
+that instead of judging positions directly against their HODL Reference Value, instead, the Profit and Loss accounting is used and positions with both USD and ETH gains (if any) be considered best performing regardless of their HODL Reference Value (which, again, may unfairly credit accrued fees to HODL).
+
+To calculate a HODL Reference value, get all the accounting = `cost_basis` and use the eth_price 
+at the position's closing withdrawal to get the counterfactual: what would the position be worth if deposits were just held instead? (without any adjustment for deposits potentially coming from fees).
+
+```{r}
+
+hodl_reference <- function(id_accounting){
+  
+price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)] 
+  
+id_accounting %>% 
+  filter(accounting == 'cost_basis') %>% 
+  summarise(
+    hodl_usd_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
+    hodl_eth_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
+)
+}
+
+reactable(
+hodl_reference(a96877)  
+)
+
+```
+
+### Resulting Value (Strategy Reference Value)
+
+To judge the hodl reference value apples to apples, one can use a similar final block pricing to 
+get a strategy reference value, which is withdrawals + fee revenue using eth_price at the block 
+of position closure. This is different from the profit and loss calculation (PnL) because PnL 
+takes into account changes in ETH's price.
+
+```{r}
+strategy_reference <- function(id_accounting){
+  price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)] 
+  
+  id_accounting %>% 
+  filter(accounting != 'cost_basis') %>% 
+  summarise(
+    strategy_usd_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
+    strategy_eth_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
+)
+}
+
+reactable(
+  strategy_reference(a96877)
+)
+
+```
+
+For this position, while the PnL was positive in USD terms, ETH's price growth over the time period 
+was so high that selling ETH for USD and accumulating fees for doing so was not enough to exceed 
+simply holding the original deposits.
+
+Note: We believe both PnL and strategy vs hodl reference should be used to understand the value of 
+providing liquidity. Making opinionated adjustments (e.g., removing accumulated fees being redeposited) 
+is not broadly recommended because cost basis can come from anywhere.
+
+Here is the strategy reference minus hodl reference to show this *realized* divergent loss with fees.
+
+```{r}
+reactable(
+strategy_reference(a96877) - hodl_reference(a96877) 
+)
+```
+
+## Parallelize for all Positions 
+
+For everyone position we must go through the same steps as done for `96877`: 
+
+1. Double Check the Fee collection quirk
+2. Create the position specific accounting table
+3. Determine total PnL over the position lifecycle
+4. Identify the Opportunity Cost (HODL Reference Value)
+5. Identify the Resulting Value (Strategy Reference Value)
+
 
 
 
