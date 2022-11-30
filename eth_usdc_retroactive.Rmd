@@ -123,6 +123,7 @@ saveRDS(unique(all_eth_prices), "eth_prices.rds")
 ```{r, message = FALSE, warning = FALSE}
 library(gmp) # large numbers
 library(reactable) # clean tables
+library(pixiedust) # markdown compliant tables
 library(plotly) # graphs
 library(dplyr) # data manipulation
 options(scipen = 10)
@@ -271,9 +272,8 @@ bobs_allocation <- price_all_tokens(x = bob_balance[['usdc']],
                  pa = 1000,  
                  yx = FALSE) # These prices are in X per Y, function can handle it.
 
-reactable(
-  as.data.frame(bobs_allocation) %>% round(., 2)
-)
+dust(as.data.frame(bobs_allocation) %>% round(., 2)) %>% 
+sprinkle_print_method(print_method = 'markdown')
 ```
  
 To get all 100000 of his USDC (x, i.e., Token 0) and 100 ETH (y, i.e., Token 1) at the current price
