@@ -1,5 +1,6 @@
 library(shroomDK)
-
+library(zoo) # infill NAs & rolling Median
+source("key_functions.R")
 # LP Actions 
 
 lp_actions <- auto_paginate_query(
@@ -91,8 +92,27 @@ eth_price[[i]]  <- get_eth_price(min_block = blocks[i],
 all_eth_prices <- do.call(rbind, eth_price)
 all_eth_prices <- all_eth_prices[order(all_eth_prices$BLOCK_NUMBER),]
 
+# if a block has no trades, infill the BLOCK_NUMBER and persist the most recent 
+# ETH Weighted Average Price, with 0 VOLUME and 0 NUM_SWAPS
+infill <- data.frame(
+  BLOCK_NUMBER = min(all_eth_prices$BLOCK_NUMBER):max(all_eth_prices$BLOCK_NUMBER)
+)
+
+filled_eth_prices <- merge(all_eth_prices, infill, all.x = TRUE, all.y = TRUE)
+
+filled_eth_prices[is.na(filled_eth_prices$"ETH_VOLUME"), c("ETH_VOLUME","NUM_SWAPS")] <- 0
+
+# Improves analysis speed to front-load these calculations and is more smoothed 
+filled_eth_prices$ETH_WAVG_PRICE <- zoo::na.locf(filled_eth_prices$ETH_WAVG_PRICE)
+ETH_MARKET_PRICE <- zoo::rollmedian(x = filled_eth_prices$ETH_WAVG_PRICE, k = 99, align = "left")
+diff_median <- nrow(filled_eth_prices) - length(ETH_MARKET_PRICE)
+ETH_MARKET_PRICE <- c(filled_eth_prices$ETH_WAVG_PRICE[1:diff_median], ETH_MARKET_PRICE)
+
+filled_eth_prices$ETH_MARKET_PRICE <- ETH_MARKET_PRICE
+
+
 # R Save Format 
 saveRDS(lp_actions, "lp_actions.rds")
 saveRDS(fees, "fees.rds")
 saveRDS(all_swaps, "all_swaps.rds")
-saveRDS(unique(all_eth_prices), "eth_prices.rds")
+saveRDS(filled_eth_prices, "eth_prices.rds")

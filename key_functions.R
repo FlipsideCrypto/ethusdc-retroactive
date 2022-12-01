@@ -49,6 +49,9 @@ ORDER BY BLOCK_NUMBER DESC
   prices = auto_paginate_query(price_query, api_key = api_key)
 }
 
+market_eth_price_at_block <- function(eth_prices, block){
+  eth_prices[eth_prices$BLOCK_NUMBER == block, "ETH_MARKET_PRICE"]
+}
 
 # Assumes price is desired in X/Y format, e.g., WBTC/ETH.
 tick_to_price <- function(tick, decimal_adjustment = 1, yx = FALSE){
