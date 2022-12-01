@@ -734,7 +734,13 @@ Adjusting for this would make the fee table look like this instead:
 # remove withdrawal from collected to fix double counting. 
 
 fee_correction <- function(id_fees, id_lp_actions){
-  browser()
+
+  # fee-collection problem only occurs in decrease_liquidity
+  # sometimes in the same transaction the same exact liquidity is added and immediately removed
+  # occurs in poorly written NF_POSITION_MANAGERS.
+  
+ id_lp_actions <- id_lp_actions %>% filter(ACTION == "DECREASE_LIQUIDITY")
+  
   fee_tx_in_lp = (id_fees$TX_HASH %in% id_lp_actions$TX_HASH)
   lp_tx_in_fee = (id_lp_actions$TX_HASH %in% id_fees$TX_HASH)
   amount_cols = c("AMOUNT0_ADJUSTED", "AMOUNT1_ADJUSTED")
@@ -748,31 +754,31 @@ fee_correction <- function(id_fees, id_lp_actions){
     # both tables have fees collected double counting withdrawals;
     # fix by subtracting the double counting
     # note: it is assumed transactions are ordered by block number for alignment to work
-    if( sum(fee_tx_in_lp) == sum(lp_tx_in_fee) &
-      mean(id_fees[fee_tx_in_lp, amount_cols] >= id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
-      
-      id_fees[fee_tx_in_lp, amount_cols] <- {
-        id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
+    if(sum(fee_tx_in_lp) == sum(lp_tx_in_fee)){
+      if(mean(id_fees[fee_tx_in_lp, amount_cols] >= id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
+        id_fees[fee_tx_in_lp, amount_cols] <- {
+          id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
+        }
       }
-    
-      } else { 
+    } else { 
       # else go 1 by one to overlapping tx and check again
       
-        for(i in id_fees$TX_HASH[fee_tx_in_lp]){
-          if(
+      for(i in id_fees$TX_HASH[fee_tx_in_lp]){
+        if(
           mean(
             id_fees[id_fees$TX_HASH == i, amount_cols] >= 
             id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
-            ) == 1
-          ){
-            id_fees[id_fees$TX_HASH == i, amount_cols] <- {
+          ) == 1
+        ){
+          id_fees[id_fees$TX_HASH == i, amount_cols] <- {
             id_fees[id_fees$TX_HASH == i, amount_cols]  - 
-          id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
-            }
-          } else next()
-        }
+              id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+          }
+        } else next()
       }
-            return(id_fees)
+    }
+    
+    return(id_fees)
   }
 }
 
