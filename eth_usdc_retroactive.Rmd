@@ -23,8 +23,9 @@ The `collect_data.R` script included in this repo uses the Flipside Crypto's shr
 
 ```{r, eval = FALSE}
 library(shroomDK)
-
-# duplication of collect_data.R
+library(zoo) # infill NAs & rolling Median
+source("key_functions.R")
+# LP Actions 
 
 lp_actions <- auto_paginate_query(
   query = "
@@ -47,6 +48,9 @@ lp_actions <- auto_paginate_query(
   api_key = readLines("api_key.txt")
 )
 
+# Collected Fees
+ # Known Issue where Closure of positions mix withdrawn tokens as if they were collected fees
+ # subtraction will be sorted out 
 fees <- auto_paginate_query(
   query = "
   SELECT
@@ -65,7 +69,7 @@ fees <- auto_paginate_query(
   api_key = readLines("api_key.txt")
 )
 
-
+# Large swap history 
 swap_spreads <- c(12370000, 13370000, 14370000, 14870000, 15370000, 15576600)
 swaps <- list()
 for(i in 1:5){
@@ -110,12 +114,32 @@ eth_price[[i]]  <- get_eth_price(min_block = blocks[i],
 }
 
 all_eth_prices <- do.call(rbind, eth_price)
+all_eth_prices <- all_eth_prices[order(all_eth_prices$BLOCK_NUMBER),]
+
+# if a block has no trades, infill the BLOCK_NUMBER and persist the most recent 
+# ETH Weighted Average Price, with 0 VOLUME and 0 NUM_SWAPS
+infill <- data.frame(
+  BLOCK_NUMBER = min(all_eth_prices$BLOCK_NUMBER):max(all_eth_prices$BLOCK_NUMBER)
+)
+
+filled_eth_prices <- merge(all_eth_prices, infill, all.x = TRUE, all.y = TRUE)
+
+filled_eth_prices[is.na(filled_eth_prices$"ETH_VOLUME"), c("ETH_VOLUME","NUM_SWAPS")] <- 0
+
+# Improves analysis speed to front-load these calculations and is more smoothed 
+filled_eth_prices$ETH_WAVG_PRICE <- zoo::na.locf(filled_eth_prices$ETH_WAVG_PRICE)
+ETH_MARKET_PRICE <- zoo::rollmedian(x = filled_eth_prices$ETH_WAVG_PRICE, k = 99, align = "left")
+diff_median <- nrow(filled_eth_prices) - length(ETH_MARKET_PRICE)
+ETH_MARKET_PRICE <- c(filled_eth_prices$ETH_WAVG_PRICE[1:diff_median], ETH_MARKET_PRICE)
+
+filled_eth_prices$ETH_MARKET_PRICE <- ETH_MARKET_PRICE
+
 
 # R Save Format 
 saveRDS(lp_actions, "lp_actions.rds")
 saveRDS(fees, "fees.rds")
 saveRDS(all_swaps, "all_swaps.rds")
-saveRDS(unique(all_eth_prices), "eth_prices.rds")
+saveRDS(filled_eth_prices, "eth_prices.rds")
 
 
 ```
@@ -127,17 +151,16 @@ library(plotly) # graphs
 library(dplyr) # data manipulation
 options(scipen = 10)
 
-all_swaps <- readRDS("all_swaps.rds")
+source("key_functions.R")
+
 lp_actions <- readRDS("lp_actions.rds")
 fees <- readRDS("fees.rds")
 eth_prices <- readRDS("eth_prices.rds")
-eth_prices <- eth_prices[order(eth_prices$BLOCK_NUMBER),]
-source("key_functions.R")
+
 ```
 
 The data includes: 
 
-- `r nrow(all_swaps)` rows of swaps.
 - `r nrow(lp_actions)` rows of liquidity pool actions.
 - `r nrow(fees)` rows of fees.
 
@@ -415,7 +438,7 @@ reactable(
 )
 ```
 
-It is important to not overfocus on this small example as indicative of a liquidity provider's experience on Uniswap v3. In the real world, Bob's liquidity would be part of one of the largest pools in Uniswap; 5 ETH would have minimal price impact; and he would only have his balance of tokens change (and fees accumulated) proportional to the liquidity he provides. In addition, numerous trades in both directions would acumulate fees while negating price movements that increase divergent loss.
+It is important to not overfocus on this small example as indicative of a liquidity provider's experience on Uniswap v3. In the real world, Bob's liquidity would be part of one of the largest pools in Uniswap; 5 ETH would have minimal price impact; and he would only have his balance of tokens change (and fees accumulated) proportional to the liquidity he provides. In addition, numerous trades in both directions would accumulate fees while negating price movements that increase divergent loss.
 
 This is just a small toy example to understand the theory, in the next section we'll look 
 at the historical positions in 1 ETH-USDC pool to understand *realized* gains and losses adjusting for changes in token balance and fees collected by the NFT position.
@@ -819,6 +842,17 @@ In ETH terms, we divide all token0 (USDC) by eth_price to get ETH terms, then su
 ## Profit & Loss
 
 ```{r}
+
+pnl <- function(id_accounting){
+ 
+pnl = data.frame(
+  pnl_usd_terms = sum(id_accounting$token0, (id_accounting$token1*id_accounting$eth_price)),
+  pnl_eth_terms = sum(id_accounting$token1, (id_accounting$token0/id_accounting$eth_price))
+)
+
+return(pnl)
+}
+
 pnl_96877 <- data.frame(
   usd_terms = sum(a96877$token0, (a96877$token1*a96877$eth_price)),
   eth_terms = sum(a96877$token1, (a96877$token0/a96877$eth_price))
@@ -855,7 +889,7 @@ at the position's closing withdrawal to get the counterfactual: what would the p
 
 hodl_reference <- function(id_accounting){
   
-price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)] 
+price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
   
 id_accounting %>% 
   filter(accounting == 'cost_basis') %>% 
@@ -879,8 +913,10 @@ of position closure. This is different from the profit and loss calculation (PnL
 takes into account changes in ETH's price.
 
 ```{r}
+
 strategy_reference <- function(id_accounting){
-  price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)] 
+  
+  price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
   
   id_accounting %>% 
   filter(accounting != 'cost_basis') %>% 
@@ -966,6 +1002,11 @@ PnL and reference values calculated.
 
 ## Double Check the Fee collection quirk
 
+By ensuring all fee collections are 1:1 at the tx_hash-unique_id level; we get a single fees 
+row per fee collection and then remove the double counting once, i.e., for transactions where
+fees are collected, then liquidity is removed, then fees are collected again (it happens rarely)
+the collections are combined prior to correction. 
+
 ```{r}
 
 # split automatically alphabetizes by ID # 
@@ -996,8 +1037,27 @@ id_fees_fixed <- lapply(1:length(id_fees_list),
 
 ## Create the position specific accounting table
 
+Now with the fixed fee list organized by unique IDs and lp_actions list organized by unique IDs 
+we can create `r length(id_fees_fixed)` accounting tables.
+
+```{r}
+
+id_accounting <- lapply(1:length(id_fees_fixed), 
+                        FUN = function(i){
+                          accounting(id_lp_actions = id_lp_list[[i]],
+                                     id_fees = id_fees_fixed[[i]],
+                                     eth_prices = eth_prices)
+                        })
+
+```
 
 ## Determine total PnL over the position lifecycle
+
+
+```{r}
+
+
+```
 
 ## Identify the Opportunity Cost (HODL Reference Value)
 
