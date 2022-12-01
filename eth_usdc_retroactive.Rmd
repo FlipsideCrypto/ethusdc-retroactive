@@ -3,12 +3,12 @@ title: "eth-usdc-DL"
 author: "Charliemarketplace"
 date: "`r Sys.Date()`"
 output:
-  html_document: 
+  html_document:
     code_folding: hide
     toc: yes
-    toc_float: yes
-    keep_md: yes
-editor_options: 
+    toc_float:
+      collapsed: false
+editor_options:
   chunk_output_type: console
 ---
 

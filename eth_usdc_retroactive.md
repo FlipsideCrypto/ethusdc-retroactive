@@ -3,12 +3,13 @@ title: "eth-usdc-DL"
 author: "Charliemarketplace"
 date: "2022-11-30"
 output:
-  html_document: 
+  html_document:
     code_folding: hide
     toc: yes
-    toc_float: yes
+    toc_float:
+      collapsed: false
     keep_md: yes
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -279,8 +280,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-2a23930b2aedfb6029cc" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-2a23930b2aedfb6029cc">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"amount_x":[100000],"amount_y":[100],"current_price":[1200],"min_price":[1000],"max_price":[1496.59]},"columns":[{"accessor":"amount_x","name":"amount_x","type":"numeric"},{"accessor":"amount_y","name":"amount_y","type":"numeric"},{"accessor":"current_price","name":"current_price","type":"numeric"},{"accessor":"min_price","name":"min_price","type":"numeric"},{"accessor":"max_price","name":"max_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"49d5d0d3dc9a1afed1179a4486a3aed3"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-2f321b20de5af1119721" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-2f321b20de5af1119721">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"amount_x":[100000],"amount_y":[100],"current_price":[1200],"min_price":[1000],"max_price":[1496.59]},"columns":[{"accessor":"amount_x","name":"amount_x","type":"numeric"},{"accessor":"amount_y","name":"amount_y","type":"numeric"},{"accessor":"current_price","name":"current_price","type":"numeric"},{"accessor":"min_price","name":"min_price","type":"numeric"},{"accessor":"max_price","name":"max_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"49d5d0d3dc9a1afed1179a4486a3aed3"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
  
 To get all 100000 of his USDC (x, i.e., Token 0) and 100 ETH (y, i.e., Token 1) at the current price
@@ -306,8 +307,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-81914a9370176585ebdd" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-81914a9370176585ebdd">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"liquidity":["33131896376530724"]},"columns":[{"accessor":"liquidity","name":"liquidity","type":"character"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"5e06dd11b79814f22100ff8313ec1668"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-e1dafc5c2d26de73a415" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-e1dafc5c2d26de73a415">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"liquidity":["33131896376530724"]},"columns":[{"accessor":"liquidity","name":"liquidity","type":"character"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"5e06dd11b79814f22100ff8313ec1668"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 For a variety of reasons, Uniswap makes optimizations that can look unintuitive. Here, this 
@@ -337,8 +338,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-cdf912b74502a3eb58c7" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-cdf912b74502a3eb58c7">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"num_eth_to_move_price_to_min":[91.56]},"columns":[{"accessor":"num_eth_to_move_price_to_min","name":"num_eth_to_move_price_to_min","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d0d3484c8221d360729c80a9cedb1c6c"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-3264e6b1b66218a54a5c" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-3264e6b1b66218a54a5c">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"num_eth_to_move_price_to_min":[91.56]},"columns":[{"accessor":"num_eth_to_move_price_to_min","name":"num_eth_to_move_price_to_min","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d0d3484c8221d360729c80a9cedb1c6c"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 As long as the number of ETH sold to the pool is less than this amount, bob's liquidity
@@ -370,8 +371,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-09d1b011689a0b617af4" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-09d1b011689a0b617af4">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"eth_taken":[4.9975],"usdc_added":[5965.8278],"eth_fee_earned":[0.0025],"original_price":[1200],"final_price":[1187.5573],"avg_price":[1193.7624]},"columns":[{"accessor":"eth_taken","name":"eth_taken","type":"numeric"},{"accessor":"usdc_added","name":"usdc_added","type":"numeric"},{"accessor":"eth_fee_earned","name":"eth_fee_earned","type":"numeric"},{"accessor":"original_price","name":"original_price","type":"numeric"},{"accessor":"final_price","name":"final_price","type":"numeric"},{"accessor":"avg_price","name":"avg_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d3abf8af8a8a50aab8dd846230d38a8e"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-29cd145d8bd9c7a5984a" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-29cd145d8bd9c7a5984a">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"eth_taken":[4.9975],"usdc_added":[5965.8278],"eth_fee_earned":[0.0025],"original_price":[1200],"final_price":[1187.5573],"avg_price":[1193.7624]},"columns":[{"accessor":"eth_taken","name":"eth_taken","type":"numeric"},{"accessor":"usdc_added","name":"usdc_added","type":"numeric"},{"accessor":"eth_fee_earned","name":"eth_fee_earned","type":"numeric"},{"accessor":"original_price","name":"original_price","type":"numeric"},{"accessor":"final_price","name":"final_price","type":"numeric"},{"accessor":"avg_price","name":"avg_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d3abf8af8a8a50aab8dd846230d38a8e"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 Is Bob better or worse off for having done this trade?
@@ -399,8 +400,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-d35dc8967f68751357b2" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-d35dc8967f68751357b2">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"original_usdc":[100000],"original_eth":[100],"original_price":[1200],"original_usdc_value":[220000],"original_eth_value":[183.33]},"columns":[{"accessor":"original_usdc","name":"original_usdc","type":"numeric"},{"accessor":"original_eth","name":"original_eth","type":"numeric"},{"accessor":"original_price","name":"original_price","type":"numeric"},{"accessor":"original_usdc_value","name":"original_usdc_value","type":"numeric"},{"accessor":"original_eth_value","name":"original_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"7acc16a636e21731866461a8f3823e23"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-e6ddeb4f42d89bb633c7" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-e6ddeb4f42d89bb633c7">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"original_usdc":[100000],"original_eth":[100],"original_price":[1200],"original_usdc_value":[220000],"original_eth_value":[183.33]},"columns":[{"accessor":"original_usdc","name":"original_usdc","type":"numeric"},{"accessor":"original_eth","name":"original_eth","type":"numeric"},{"accessor":"original_price","name":"original_price","type":"numeric"},{"accessor":"original_usdc_value","name":"original_usdc_value","type":"numeric"},{"accessor":"original_eth_value","name":"original_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"7acc16a636e21731866461a8f3823e23"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ```r
@@ -416,8 +417,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-6776f5d786461068dfbf" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-6776f5d786461068dfbf">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"new_usdc":[105965.8278],"new_eth":[95.0025],"new_price":[1187.557],"new_usdc_value":[218786.7117],"new_eth_value":[184.2326]},"columns":[{"accessor":"new_usdc","name":"new_usdc","type":"numeric"},{"accessor":"new_eth","name":"new_eth","type":"numeric"},{"accessor":"new_price","name":"new_price","type":"numeric"},{"accessor":"new_usdc_value","name":"new_usdc_value","type":"numeric"},{"accessor":"new_eth_value","name":"new_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"b45bed13653044cb2f14c314b21bc5b9"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-131d91b5b78144aff6b8" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-131d91b5b78144aff6b8">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"new_usdc":[105965.8278],"new_eth":[95.0025],"new_price":[1187.557],"new_usdc_value":[218786.7117],"new_eth_value":[184.2326]},"columns":[{"accessor":"new_usdc","name":"new_usdc","type":"numeric"},{"accessor":"new_eth","name":"new_eth","type":"numeric"},{"accessor":"new_price","name":"new_price","type":"numeric"},{"accessor":"new_usdc_value","name":"new_usdc_value","type":"numeric"},{"accessor":"new_eth_value","name":"new_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"b45bed13653044cb2f14c314b21bc5b9"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 Whether Bob is better or worse off technically depends on perspective. In ETH terms he is up 
@@ -449,8 +450,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-587bc61e5ba7e0f2daeb" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-587bc61e5ba7e0f2daeb">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"new_usdc":[105965.8278],"new_eth":[95.0025],"central_exchange_price":[1200],"cex_usdc_value":[219968.8278],"cex_eth_value":[183.3074]},"columns":[{"accessor":"new_usdc","name":"new_usdc","type":"numeric"},{"accessor":"new_eth","name":"new_eth","type":"numeric"},{"accessor":"central_exchange_price","name":"central_exchange_price","type":"numeric"},{"accessor":"cex_usdc_value","name":"cex_usdc_value","type":"numeric"},{"accessor":"cex_eth_value","name":"cex_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"fd77a53702e5a1fa85cfb197472aad4c"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-5cc4feaa2095089b8b4b" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-5cc4feaa2095089b8b4b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"new_usdc":[105965.8278],"new_eth":[95.0025],"central_exchange_price":[1200],"cex_usdc_value":[219968.8278],"cex_eth_value":[183.3074]},"columns":[{"accessor":"new_usdc","name":"new_usdc","type":"numeric"},{"accessor":"new_eth","name":"new_eth","type":"numeric"},{"accessor":"central_exchange_price","name":"central_exchange_price","type":"numeric"},{"accessor":"cex_usdc_value","name":"cex_usdc_value","type":"numeric"},{"accessor":"cex_eth_value","name":"cex_eth_value","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"fd77a53702e5a1fa85cfb197472aad4c"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 It is important to not overfocus on this small example as indicative of a liquidity provider's experience on Uniswap v3. In the real world, Bob's liquidity would be part of one of the largest pools in Uniswap; 5 ETH would have minimal price impact; and he would only have his balance of tokens change (and fees accumulated) proportional to the liquidity he provides. In addition, numerous trades in both directions would acumulate fees while negating price movements that increase divergent loss.
@@ -487,8 +488,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-ad6bc6640b627eea6f9b" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-ad6bc6640b627eea6f9b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{".rownames":["BLOCK_NUMBER","BLOCK_TIMESTAMP","TX_HASH","ACTION","NF_TOKEN_ID","AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED","LIQUIDITY","TOKEN0_SYMBOL","TOKEN1_SYMBOL","TICK_LOWER","TICK_UPPER","PRICE_LOWER_0_1","PRICE_UPPER_0_1","LIQUIDITY_PROVIDER","NF_POSITION_MANAGER_ADDRESS"],"1":["15576594","2022-09-20 18:52:23.000","0xffa417a20a9c10fc997cc19d2066774f5e0c81038fdc565a1b91698526b728f8","DECREASE_LIQUIDITY","317705","26442.68","14.6205","20122745034548508","USDC","WETH","203740","205010","1250.184","1419.471","0xc36442b4a4522e871399cd717abdd847ab11fe88","0xc36442b4a4522e871399cd717abdd847ab11fe88"]},"columns":[{"accessor":".rownames","name":"","type":"character","sortable":false,"filterable":false,"rowHeader":true},{"accessor":"1","name":"1","type":"character"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d5c5a64cdafda4530f426c1e5fcfa6b6"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-563d49b7744a3a966919" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-563d49b7744a3a966919">{"x":{"tag":{"name":"Reactable","attribs":{"data":{".rownames":["BLOCK_NUMBER","BLOCK_TIMESTAMP","TX_HASH","ACTION","NF_TOKEN_ID","AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED","LIQUIDITY","TOKEN0_SYMBOL","TOKEN1_SYMBOL","TICK_LOWER","TICK_UPPER","PRICE_LOWER_0_1","PRICE_UPPER_0_1","LIQUIDITY_PROVIDER","NF_POSITION_MANAGER_ADDRESS"],"1":["15576594","2022-09-20 18:52:23.000","0xffa417a20a9c10fc997cc19d2066774f5e0c81038fdc565a1b91698526b728f8","DECREASE_LIQUIDITY","317705","26442.68","14.6205","20122745034548508","USDC","WETH","203740","205010","1250.184","1419.471","0xc36442b4a4522e871399cd717abdd847ab11fe88","0xc36442b4a4522e871399cd717abdd847ab11fe88"]},"columns":[{"accessor":".rownames","name":"","type":"character","sortable":false,"filterable":false,"rowHeader":true},{"accessor":"1","name":"1","type":"character"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"d5c5a64cdafda4530f426c1e5fcfa6b6"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 At a given BLOCK_NUMBER and BLOCK_TIMESTAMP, there was a specific TX_HASH. In this transaction,
@@ -716,8 +717,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-1f1ad7a9e31b040ffdfb" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-1f1ad7a9e31b040ffdfb">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12901945,12915974,13084868,13090533,13133732],"TX_HASH":["0xa97fd5bccfe6be4218dc76927b2b841575584768ba24dfc5fec54c168ce8827f","0xf88d866c438df1cda9c78d249d06de0476ed94a906edbea4659e13984a13e902","0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"ACTION":["INCREASE_LIQUIDITY","INCREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY"],"AMOUNT0_ADJUSTED":[14425.157658,1571.881325,46430.211919,31389.105591,112012.823322],"AMOUNT1_ADJUSTED":[49.999999999,14.999999999,0.9983412426,1.802315677,0],"LIQUIDITY":[1.43104484423314e+16,3.99050626952081e+15,4.57523867796305e+15,3.43142900847229e+15,1.02942870254169e+16],"liquidity_signed":[1.43104484423314e+16,3.99050626952081e+15,-4.57523867796305e+15,-3.43142900847229e+15,-1.02942870254169e+16]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"ACTION","name":"ACTION","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"},{"accessor":"LIQUIDITY","name":"LIQUIDITY","type":"numeric"},{"accessor":"liquidity_signed","name":"liquidity_signed","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"0850d987136eaf86f0fa34943af41407"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-5eeb5007114775af8380" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-5eeb5007114775af8380">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12901945,12915974,13084868,13090533,13133732],"TX_HASH":["0xa97fd5bccfe6be4218dc76927b2b841575584768ba24dfc5fec54c168ce8827f","0xf88d866c438df1cda9c78d249d06de0476ed94a906edbea4659e13984a13e902","0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"ACTION":["INCREASE_LIQUIDITY","INCREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY"],"AMOUNT0_ADJUSTED":[14425.157658,1571.881325,46430.211919,31389.105591,112012.823322],"AMOUNT1_ADJUSTED":[49.999999999,14.999999999,0.9983412426,1.802315677,0],"LIQUIDITY":[1.43104484423314e+16,3.99050626952081e+15,4.57523867796305e+15,3.43142900847229e+15,1.02942870254169e+16],"liquidity_signed":[1.43104484423314e+16,3.99050626952081e+15,-4.57523867796305e+15,-3.43142900847229e+15,-1.02942870254169e+16]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"ACTION","name":"ACTION","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"},{"accessor":"LIQUIDITY","name":"LIQUIDITY","type":"numeric"},{"accessor":"liquidity_signed","name":"liquidity_signed","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"0850d987136eaf86f0fa34943af41407"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 The 3 rows of fees with a matching transaction in liquidity pool actions all have this 
@@ -732,8 +733,8 @@ reactable(fee_tx_adjust)
 ```
 
 ```{=html}
-<div id="htmlwidget-5472404aa32bade1e79a" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-5472404aa32bade1e79a">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[13084868,13090533,13133732],"TX_HASH":["0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"AMOUNT0_ADJUSTED":[46639.687872,31476.059913,112416.257167],"AMOUNT1_ADJUSTED":[1.060363038,1.831116321,0.1235953108]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"cfe8b44a4b4f422b63a5e3e5744bacc1"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-3d0d5d2c155e789477ba" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-3d0d5d2c155e789477ba">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[13084868,13090533,13133732],"TX_HASH":["0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"AMOUNT0_ADJUSTED":[46639.687872,31476.059913,112416.257167],"AMOUNT1_ADJUSTED":[1.060363038,1.831116321,0.1235953108]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"cfe8b44a4b4f422b63a5e3e5744bacc1"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ```r
@@ -741,8 +742,8 @@ reactable(withdraws_of_interest)
 ```
 
 ```{=html}
-<div id="htmlwidget-93dc00587875e4a031ee" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-93dc00587875e4a031ee">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[13084868,13090533,13133732],"TX_HASH":["0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"ACTION":["DECREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY"],"AMOUNT0_ADJUSTED":[46430.211919,31389.105591,112012.823322],"AMOUNT1_ADJUSTED":[0.9983412426,1.802315677,0],"LIQUIDITY":[4.57523867796305e+15,3.43142900847229e+15,1.02942870254169e+16],"liquidity_signed":[-4.57523867796305e+15,-3.43142900847229e+15,-1.02942870254169e+16]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"ACTION","name":"ACTION","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"},{"accessor":"LIQUIDITY","name":"LIQUIDITY","type":"numeric"},{"accessor":"liquidity_signed","name":"liquidity_signed","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"48877aedcb9f9f89e347914b31cd374f"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-058e28d71934e1da3ef9" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-058e28d71934e1da3ef9">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[13084868,13090533,13133732],"TX_HASH":["0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"ACTION":["DECREASE_LIQUIDITY","DECREASE_LIQUIDITY","DECREASE_LIQUIDITY"],"AMOUNT0_ADJUSTED":[46430.211919,31389.105591,112012.823322],"AMOUNT1_ADJUSTED":[0.9983412426,1.802315677,0],"LIQUIDITY":[4.57523867796305e+15,3.43142900847229e+15,1.02942870254169e+16],"liquidity_signed":[-4.57523867796305e+15,-3.43142900847229e+15,-1.02942870254169e+16]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"ACTION","name":"ACTION","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"},{"accessor":"LIQUIDITY","name":"LIQUIDITY","type":"numeric"},{"accessor":"liquidity_signed","name":"liquidity_signed","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"48877aedcb9f9f89e347914b31cd374f"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 Adjusting for this would make the fee table look like this instead: 
@@ -800,8 +801,8 @@ reactable(f96877)
 ```
 
 ```{=html}
-<div id="htmlwidget-e8c55f7805742339f95b" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-e8c55f7805742339f95b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12930496,12950138,12968982,12984534,13001072,13021106,13046165,13071834,13084868,13090533,13133732],"TX_HASH":["0xbd296a4a4123d168dfe9909d43171aec4864e1563c939b7943971b08c07ad84b","0x284d6dc494b12978f68faa0d127db8eeff48a41979e774ff8a09e11db4a37a04","0xa653b26b2193107526d74c49ce70d8bd830b7e47622576a77f049701e409b841","0x19169700ef94d19b94a5afd5f3f6453c4f8f7a4a9f668b4502318a4b5800b0e6","0x608670cfbbc4573c28b67e4131425016fc7230568d107b331ccb7da6f5b7872a","0xdb7d67e5a41e67370fcb08a9a6aa991cec962906a8cfe3915ca8d9fb6e043d13","0xfea64782cb4d8f43e58ff8b463bf21b936507d98adb66e3bf7725b07ac222116","0x570b4155ee8eebe689afac919215f9ad173cf220b7d806707cf20ce92f1c3940","0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"AMOUNT0_ADJUSTED":[490.907193,555.965385,601.810994,535.102708,651.885902,513.093425,620.142785,511.728319,209.475953000001,86.9543220000014,403.433845000007],"AMOUNT1_ADJUSTED":[0.2056597131,0.2135533752,0.2220657761,0.1680713716,0.2106605617,0.1585465357,0.2019659304,0.157644449,0.0620217954,0.0288006440000002,0.1235953108]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"aa288ef81b05e4351ffa727916b1febd"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-0fab7fe2dab5174e2507" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-0fab7fe2dab5174e2507">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12930496,12950138,12968982,12984534,13001072,13021106,13046165,13071834,13084868,13090533,13133732],"TX_HASH":["0xbd296a4a4123d168dfe9909d43171aec4864e1563c939b7943971b08c07ad84b","0x284d6dc494b12978f68faa0d127db8eeff48a41979e774ff8a09e11db4a37a04","0xa653b26b2193107526d74c49ce70d8bd830b7e47622576a77f049701e409b841","0x19169700ef94d19b94a5afd5f3f6453c4f8f7a4a9f668b4502318a4b5800b0e6","0x608670cfbbc4573c28b67e4131425016fc7230568d107b331ccb7da6f5b7872a","0xdb7d67e5a41e67370fcb08a9a6aa991cec962906a8cfe3915ca8d9fb6e043d13","0xfea64782cb4d8f43e58ff8b463bf21b936507d98adb66e3bf7725b07ac222116","0x570b4155ee8eebe689afac919215f9ad173cf220b7d806707cf20ce92f1c3940","0xfec31c5b9780f56facfaf87a59ccd5513ee2d493a50e6e3757214a311799eaea","0x5da6f1dc0ed3256153a4733fde89d1d92ebc19cb5372b2c57133ca553f0d375a","0x11b571491f889317f309919cc56994801e6d76c8cd770d602de9155c882a3cdc"],"AMOUNT0_ADJUSTED":[490.907193,555.965385,601.810994,535.102708,651.885902,513.093425,620.142785,511.728319,209.475953000001,86.9543220000014,403.433845000007],"AMOUNT1_ADJUSTED":[0.2056597131,0.2135533752,0.2220657761,0.1680713716,0.2106605617,0.1585465357,0.2019659304,0.157644449,0.0620217954,0.0288006440000002,0.1235953108]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"TX_HASH","name":"TX_HASH","type":"character"},{"accessor":"AMOUNT0_ADJUSTED","name":"AMOUNT0_ADJUSTED","type":"numeric"},{"accessor":"AMOUNT1_ADJUSTED","name":"AMOUNT1_ADJUSTED","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"aa288ef81b05e4351ffa727916b1febd"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ## Accounting Table
@@ -860,8 +861,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-98a2211f8054fa7244b7" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-98a2211f8054fa7244b7">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12901945,12915974,13084868,13090533,13133732,13133732],"accounting":["cost_basis","cost_basis","withdrawal","withdrawal","withdrawal","fee revenue"],"token0":[-14425.157658,-1571.881325,46430.211919,31389.105591,112012.823322,5180.50083100001],"token1":[-49.999999999,-14.999999999,0.9983412426,1.802315677,0,1.752585463],"eth_price":[2351.7957534095,2283.527849571,3333.870314001,3202.5723341435,3426.148502838,3426.148502838]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"accounting","name":"accounting","type":"character"},{"accessor":"token0","name":"token0","type":"numeric"},{"accessor":"token1","name":"token1","type":"numeric"},{"accessor":"eth_price","name":"eth_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"98b703f20619adee96f08f4315b7c14f"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-56aa9ae2219c4aa21a6b" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-56aa9ae2219c4aa21a6b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"BLOCK_NUMBER":[12901945,12915974,13084868,13090533,13133732,13133732],"accounting":["cost_basis","cost_basis","withdrawal","withdrawal","withdrawal","fee revenue"],"token0":[-14425.157658,-1571.881325,46430.211919,31389.105591,112012.823322,5180.50083100001],"token1":[-49.999999999,-14.999999999,0.9983412426,1.802315677,0,1.752585463],"eth_price":[2351.7957534095,2283.527849571,3333.870314001,3202.5723341435,3426.148502838,3426.148502838]},"columns":[{"accessor":"BLOCK_NUMBER","name":"BLOCK_NUMBER","type":"numeric"},{"accessor":"accounting","name":"accounting","type":"character"},{"accessor":"token0","name":"token0","type":"numeric"},{"accessor":"token1","name":"token1","type":"numeric"},{"accessor":"eth_price","name":"eth_price","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"98b703f20619adee96f08f4315b7c14f"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 What should be clear is this position had a large net change from ETH to USDC. 
@@ -894,8 +895,8 @@ reactable(pnl_96877)
 ```
 
 ```{=html}
-<div id="htmlwidget-1fcbfbeb7a8a9390da04" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-1fcbfbeb7a8a9390da04">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"usd_terms":[42277.9018872488],"eth_terms":[-9.33519644654424]},"columns":[{"accessor":"usd_terms","name":"usd_terms","type":"numeric"},{"accessor":"eth_terms","name":"eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"9473ea01a6f1fe8a19082df0fad27252"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-8dc7ac6e534b8d4eeea2" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-8dc7ac6e534b8d4eeea2">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"usd_terms":[42277.9018872488],"eth_terms":[-9.33519644654424]},"columns":[{"accessor":"usd_terms","name":"usd_terms","type":"numeric"},{"accessor":"eth_terms","name":"eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"9473ea01a6f1fe8a19082df0fad27252"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ```r
@@ -938,8 +939,8 @@ hodl_reference(a96877)
 ```
 
 ```{=html}
-<div id="htmlwidget-2c31fb9c58be1c9e0e7d" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-2c31fb9c58be1c9e0e7d">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"hodl_usd_terms":[238696.691660618],"hodl_eth_terms":[69.6691026273078]},"columns":[{"accessor":"hodl_usd_terms","name":"hodl_usd_terms","type":"numeric"},{"accessor":"hodl_eth_terms","name":"hodl_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"194667cefa9227e81c66a9118f804c57"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-74e819665453e88a97bd" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-74e819665453e88a97bd">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"hodl_usd_terms":[238696.691660618],"hodl_eth_terms":[69.6691026273078]},"columns":[{"accessor":"hodl_usd_terms","name":"hodl_usd_terms","type":"numeric"},{"accessor":"hodl_eth_terms","name":"hodl_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"194667cefa9227e81c66a9118f804c57"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 ## Resulting Value (Strategy Reference Value)
@@ -968,8 +969,8 @@ reactable(
 ```
 
 ```{=html}
-<div id="htmlwidget-39a4db4c7c743a640bb5" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-39a4db4c7c743a640bb5">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"strategy_usd_terms":[210612.726235204],"strategy_eth_terms":[61.4721533701022]},"columns":[{"accessor":"strategy_usd_terms","name":"strategy_usd_terms","type":"numeric"},{"accessor":"strategy_eth_terms","name":"strategy_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"ff783edee720c7a7c0bf29b77a5555ab"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-8227c1dc1db2ca86f0e2" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-8227c1dc1db2ca86f0e2">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"strategy_usd_terms":[210612.726235204],"strategy_eth_terms":[61.4721533701022]},"columns":[{"accessor":"strategy_usd_terms","name":"strategy_usd_terms","type":"numeric"},{"accessor":"strategy_eth_terms","name":"strategy_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"ff783edee720c7a7c0bf29b77a5555ab"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 For this position, while the PnL was positive in USD terms, ETH's price growth over the time period 
@@ -990,8 +991,8 @@ strategy_reference(a96877) - hodl_reference(a96877)
 ```
 
 ```{=html}
-<div id="htmlwidget-06e33f0d049ffe557f31" class="reactable html-widget" style="width:auto;height:auto;"></div>
-<script type="application/json" data-for="htmlwidget-06e33f0d049ffe557f31">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"strategy_usd_terms":[-28083.9654254142],"strategy_eth_terms":[-8.19694925720565]},"columns":[{"accessor":"strategy_usd_terms","name":"strategy_usd_terms","type":"numeric"},{"accessor":"strategy_eth_terms","name":"strategy_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"b2217cdf4bfd4d4b892f30e66fc49a01"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
+<div id="htmlwidget-32f0e636c41db869b22b" class="reactable html-widget" style="width:auto;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-32f0e636c41db869b22b">{"x":{"tag":{"name":"Reactable","attribs":{"data":{"strategy_usd_terms":[-28083.9654254142],"strategy_eth_terms":[-8.19694925720565]},"columns":[{"accessor":"strategy_usd_terms","name":"strategy_usd_terms","type":"numeric"},{"accessor":"strategy_eth_terms","name":"strategy_eth_terms","type":"numeric"}],"defaultPageSize":10,"paginationType":"numbers","showPageInfo":true,"minRows":1,"dataKey":"b2217cdf4bfd4d4b892f30e66fc49a01"},"children":[]},"class":"reactR_markup"},"evals":[],"jsHooks":[]}</script>
 ```
 
 # Parallelize for all Positions 
