@@ -154,6 +154,10 @@ options(scipen = 10)
 source("key_functions.R")
 
 lp_actions <- readRDS("lp_actions.rds")
+
+# remove actions that don't remove liquidity, these are fee collection events
+lp_actions <- lp_actions %>% filter(LIQUIDITY != 0)
+
 fees <- readRDS("fees.rds")
 eth_prices <- readRDS("eth_prices.rds")
 
@@ -449,20 +453,23 @@ at the historical positions in 1 ETH-USDC pool to understand *realized* gains an
 
 Uniswap liquidity pools are (most often) held via ERC721 NFTs minted via an NFT Position Manager.
 
-Some protocols with custom NFT Position Managers won't use the Uniswap one and will thus be 
-lacking in a Non-fungible Token ID (NF Token ID).
+Some protocols (e.g. Gamma.xyz) collect individual deposits into Uni v3 positions within a Vault that acts as a custom NFT Position Manager. Thus, their positions won't use the Uniswap NFT Position Manager and will lack a Non-fungible Token ID (NF_TOKEN_ID).
 
 Of the `r nrow(lp_actions)` rows in the weth-usdc liquidity pool actions history up to 
-block height 15,576,600, there are only `r length(unique(lp_actions$LIQUIDITY_PROVIDER))`
- unique liquidity providers recorded. This is because the the Uni v3 NFT Contract 
-`0xc36442b4a4522e871399cd717abdd847ab11fe88` is the deliverer of tokens for most positions.
+block height 15,576,600, there are `r sum(is.na(lp_actions$NF_TOKEN_ID))` entries without an 
+NF Token ID.
+
+`r mean(is.na(lp_actions %>% filter(NF_POSITION_MANAGER_ADDRESS != '0xc36442b4a4522e871399cd717abdd847ab11fe88') %>% select(NF_TOKEN_ID))) * 100`% of the non-Uniswap NFT Position Managers are missing NF Token IDs (as expected). 
+
+`r mean(is.na(lp_actions %>% filter(NF_POSITION_MANAGER_ADDRESS == '0xc36442b4a4522e871399cd717abdd847ab11fe88') %>% select(NF_TOKEN_ID)))`% of the Uniswap NFT Position Manager actions are missing NF Token IDs (as expected).
 
 Thus the best way to identify a *unique* position are: 
 
 - If an NFT Token ID is available, use the token ID as a unique identifier.
-- Otherwise, because the token ID will be NA, concatenate the liquidity provider, lower price and upper price of position (or more specifically lower *tick* and upper *tick*) as a unique position.
 
-Here is an example row of the LP Actions table transposed to break down.
+- Otherwise, because the token ID will be NA, concatenate the NF_POSITION_MANAGER--TICK_LOWER--TICK_UPPER as a unique position.
+
+Here is an example row of the LP Actions table transposed to break down how to read Liquidity Pool Actions.
 
 ```{r}
 reactable(
@@ -470,16 +477,26 @@ reactable(
 )
 ```
 
-At a given BLOCK_NUMBER and BLOCK_TIMESTAMP, there was a specific TX_HASH. In this transaction,
-the liquidity ACTION for the position was `DECREASE_LIQUIDITY`. The position with its liquidity lowered was 
+- At a given BLOCK_NUMBER and BLOCK_TIMESTAMP, there was a specific TX_HASH. In this transaction,
+the liquidity ACTION for the position was `DECREASE_LIQUIDITY`. 
+
+- The position with its liquidity lowered was 
 position `317705` and the AMOUNT0_ADJUSTED (USDC) was `26442.68` while the AMOUNT1_ADJUSTED was 
-`14.6205`. The LIQUIDITY is a large number `2.0122 * 10^16` and the tokens, again, are TOKEN0_SYMBOL `USDC` and TOKEN1_SYMBOL `WETH`.
+`14.6205`. 
 
-Position `317705` represents liquidity deposited in the range of TICK_LOWER `203740` and 
-`205010`. Notice TICK_LOWER is a smaller number than TICK_UPPER. Some Uniswap v3 pools will have negative
-values for these ticks; whether ticks are positive or negative depends on whether 1 unit of TOKEN0 or TOKEN1 is worth more. PRICE_LOWER_0_1 and PRICE_UPPER_0_1 are the ticks converted into USDC/ETH price for easier readability; technically the contract uses TOKEN1/TOKEN0 for internal pricing.
+- The LIQUIDITY is a large number `2.0122 * 10^16` and the tokens, again, are TOKEN0_SYMBOL `USDC` and TOKEN1_SYMBOL `WETH`.
 
-The LIQUIDITY_PROVIDER is most often the NFT Contract due to quirks in the events emitted from the contract (NFTs are transferable so it is the NFT that is important not any individual depositor of liquidity). The NF_POSITION_MANAGER_ADDRESS is also most often the NFT Contract, but in cases here the NF_TOKEN_ID is missing, this will be NA, requiring us to use LIQUIDITY_PROVIDER-TICK_LOWER-TICK_UPPER as a unique identifier for those positions.
+- Position `317705` represents liquidity deposited in the range of TICK_LOWER `203740` and 
+`205010`. 
+
+Notice TICK_LOWER is a smaller number than TICK_UPPER. Some Uniswap v3 pools will have negative
+values for these ticks; whether ticks are positive or negative depends on whether 1 unit of TOKEN0 or TOKEN1 is worth more. 
+
+- PRICE_LOWER_0_1 and PRICE_UPPER_0_1 are the ticks converted into USDC/ETH price for easier readability; technically the contract uses TOKEN1/TOKEN0 for internal pricing.
+
+- The LIQUIDITY_PROVIDER is the individual address handling the liquidity, but note, NFT positions are transferable so it is the NFT ID that is the best unique identifier of how positions change.
+
+- The NF_POSITION_MANAGER_ADDRESS is most often the Uniswap v3 NFT Contract, but in cases here the NF_TOKEN_ID is missing, this will be a custom position manager contract (e.g., Gamma.xyz). So NF_POSITION_MANAGER_ADDRESS--TICK_LOWER--TICK_UPPER is a unique identifier for those positions.
 
 ## Completely Closed Positions
 
@@ -487,22 +504,23 @@ When depositing into a position, you provide a certain amount if LIQUIDITY. This
 No matter the price movements within the pool, your amount of LIQUIDITY is fixed unless you INCREASE or DECREASE your liquidity (adding or removing assets to the same position).
 
 This is why Uniswap v3 is so revolutionary compared to other decentralized exchanges, given the same amount of assets you can *concentrate* your liquidity to increase the share of fee revenue you earn. What is less obvious 
-is that as price moves, the more narrow your range, the faster you sell your share of an asset.
+is that as price moves, the more narrow your range, the faster you sell your proportion of the higher priced asset.
 
 Using the Bob example above, if he was 1 of many liquidity positions, the 5 ETH sale would not have reduced his position by 4.9975 ETH and increased it by 5,965.8278 USDC. It would have reduced it by less ETH as a fraction of his liquidity relative to all the available liquidity that includes the prices (original price 1200 USDC/ETH to 1187.557 USDC/ETH).
 
-Given any particular price it is possible to assess the each positions allocation of assets if it is known how much liquidity they provided and the range they provided that liquidity. But it is not tracked and emitted by the contract every block.
+Given any particular price, it is possible to assess each positions allocation of assets if it is known how much liquidity they provided and the range they provided that liquidity. But it is not tracked and emitted by the contract every block.
 
-This is partially why changes in his absolute value (e.g., his total USDC value changing from 220,000 to 218786.7117) are often called *impermanent* loss - because trades in the other direction change this value. 
+This is partially why changes in his absolute value (e.g., his total USDC value changing from 220,000 to 218786.7117) are sometimes called *impermanent* loss (also known as Divergent Loss) - because trades in the other direction change this value and thus loss is not permanent until assets are withdrawn and the gain/loss is realized.
+
 Until Bob withdraws his liquidity, the fraction of his assets in USDC and ETH are changing with every trade. What stays the same is the liquidity he provides.
 
-Thus, this analysis will focus on *realized* profit or loss. Someone puts liquidity with 2 tokens in a range at Time [1]. The later, they remove their liquidity and get 2 tokens at Time [2]. Differences in the amount of tokens received (both from the price changes and from fees accumulated) and the market price determine whether the person has profited or lost relative to *not having deposited liquidity at all*.
+Thus, this analysis will focus on *realized* profit or loss. Someone puts liquidity with tokens in a range at Time [1]. Then later, they remove their liquidity and get tokens at Time [2]. Differences in the amount of tokens received (both from the price changes and from fees accumulated) and the market price determine whether the person has profited or lost over time.
 
 ### Identifying a Closed Position 
 
 To identify a closed position is pretty simple: 
 
-- For each unique position (NF Token ID or liquidity_provider-tick_lower-tick_upper)
+- For each unique position (NF Token ID or nf_position_manager_address-tick_lower-tick_upper)
 - Add all increases of liquidity
 - Subtract all decreases of liquidity
 - If the sum of changes is 0, the position is closed!
@@ -512,49 +530,37 @@ To identify a closed position is pretty simple:
 ```{r}
 lp_actions$unique_id <- lp_actions$NF_TOKEN_ID
 
-make_id <- function(row){
- row$unique_id <- paste0(row$LIQUIDITY_PROVIDER,"-", row$TICK_LOWER,"-",row$TICK_UPPER)
- return(row)
-}
-
 custom_index <- which(is.na(lp_actions$unique_id))
 
-lp_actions[custom_index, "unique_id"] <- paste0(lp_actions[custom_index, "LIQUIDITY_PROVIDER"],
-                                                "-",
+lp_actions[custom_index, "unique_id"] <- paste0(lp_actions[custom_index, "NF_POSITION_MANAGER_ADDRESS"],
+                                                "--",
                                                 lp_actions[custom_index, "TICK_LOWER"],
-                                                "-",
+                                                "--",
                                                 lp_actions[custom_index, "TICK_UPPER"])
 
 # while here do fees too
 fees$unique_id <- fees$NF_TOKEN_ID
 custom_index <- which(is.na(fees$unique_id))
-fees[custom_index,"unique_id"] <- paste0(fees[custom_index, "LIQUIDITY_PROVIDER"],
-                                                "-",
+fees[custom_index,"unique_id"] <- paste0(fees[custom_index, "NF_POSITION_MANAGER_ADDRESS"],
+                                                "--",
                                                 fees[custom_index, "TICK_LOWER"],
-                                                "-",
+                                                "--",
                                                 fees[custom_index, "TICK_UPPER"])
 
 # also while here, ensure only 1 fee collection row per tx_hash, i.e., just add them
+
 fees <- fees %>% 
   group_by(across(c(-AMOUNT0_ADJUSTED, -AMOUNT1_ADJUSTED))) %>% 
   summarise(
   AMOUNT0_ADJUSTED = sum(AMOUNT0_ADJUSTED),
   AMOUNT1_ADJUSTED = sum(AMOUNT1_ADJUSTED), .groups = "drop") %>%  
-  relocate(c(AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED), .after = NF_TOKEN_ID) %>% 
+  relocate(c(NF_TOKEN_ID, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED), .after = NF_TOKEN_ID) %>% 
   as.data.frame()
 
 
-
-# remove DECREASE_LIQUIDITY where LIQUIDITY == 0 
-# this is just a collect fees action. Fees will be identified separately
-lp_actions_only_add_removes <- lp_actions %>% filter(
-  LIQUIDITY != 0
-)
-
 ```
 
-Of the `r nrow(lp_actions_only_add_removes)` where liquidity is added or removed (some rows are decreases of 0 liquidity, which is how the contract notes fees are collected) there are `r length(unique(unique(lp_actions_only_add_removes$unique_id)))` unique 
-positions.
+Of the `r nrow(lp_actions)` where liquidity is added or removed there are `r length(unique(unique(lp_actions$unique_id)))` unique positions.
 
 ```{r}
 
@@ -584,17 +590,19 @@ As shown with Bob's example where the pool price after a trade can differ from t
 price at the block level to determine the market value, instead a volume-time-weighted average price at the block level is constructed from the major ETH-Stablecoin Uniswap v3 pools to better proxy the price of assets
 that any liquidity depositor *could* sell their tokens at instead of depositing the tokens in Uniswap's ETH-USDC 0.05% pool.
 
-The following method is used to assess the *cost basis* of each liquidity pool deposit.
+The following method is used to assess the reference price at any block height.
 
- - Given the Block where liquidity was added or removed, the previous 100 blocks (~20 minutes) have all their stablecoin trades (ETH-USDC 0.05%, 0.3%, 1%; ETH-DAI 0.3%, ETH-USDT 0.05%, 0.3%) averaged weighted by volume.
- - Assuming each stablecoin is exactly = 1 dollar, the median of volume weighted price is used get a single market price at the block level. This smooths large spikes in single pool pricing which are likely not representative of broader market volatility.
- 
- 
+ - For every block where an ETH-stablecoin trade occurs in the ETH-USDC: 0.05%, 0.3%, 1%; ETH-DAI 0.3%; ETH-USDT 0.05%, 0.3% pools on Ethereum mainnet, the ETH volume weighted average swap price (VWAP) is identified while treating each stablecoin as exactly = 1 dollar.
+- This VWAP is used get a single market price at the block level, where blocks without any trades are filled with the most recent block's VWAP. 
+- A 99 block rolling median is then calculated to smooth spikes in price across blocks to better represent a broader market price.
+
+In testing, this rolling median methodology had much less volatility compared to simple lagged VWAP or taking the block level VWAP directly.
+
+The `eth_prices` dataset calculable from `collect_data.R` reproduces this methodology to get block level MARKET_ETH_PRICE. 
 ```{r}
 
 market_eth_price_at_block <- function(eth_prices, block){
- eth_prices %>% filter(BLOCK_NUMBER < block & BLOCK_NUMBER >= (block - 100)) %>% 
-    summarise(median(ETH_WAVG_PRICE)) %>% as.numeric()
+ eth_prices$ETH_MARKET_PRICE[eth_prices$BLOCK_NUMBER %in% block]
 }
 
 ```
@@ -626,25 +634,25 @@ A clarifying example:
 
 The accounting for this position would be: 
 
-1 ETH & 1000 USDC deposited at cost basis [1]
-0.1 ETH and 100 USDC deposited at cost basis [2]
-0.5 ETH and 2000 USDC withdrawn at Withdrawal prices [3]
-0.15 ETH and 150 USDC total fees accumulated at position closure prices, which in this case is Withdrawal prices [3]
+- 1 ETH & 1000 USDC deposited at cost basis [1]
+- 0.1 ETH and 100 USDC deposited at cost basis [2]
+- 0.5 ETH and 2000 USDC withdrawn at Withdrawal prices [3]
+- 0.15 ETH and 150 USDC total fees accumulated at position closure prices, which in this case is Withdrawal prices [3]
 
 This looks different from the more simple {Out - In} accounting, but gets to the same 
 result in [ETH USDC] format: 
 
-Fee Revenue + Withdrawal - Cost Basis [1] - Cost Basis [2] = [ETH_profit USDC_profit]
+- Fee Revenue + Withdrawal - Cost Basis [1] - Cost Basis [2] = [ETH_profit USDC_profit]
 
-[0.15, 150] + [0.5, 2000] - [1, 1000] - [0.1, 100] = [-0.45, 1050]
+- [0.15, 150] + [0.5, 2000] - [1, 1000] - [0.1, 100] = [-0.45, 1050]
 
 This is the same result as looking at simple in/out: 
 
-[1.1, 1100] [ETH USDC] go in; [0.65, 2150] come out
+- [1.1, 1100] [ETH USDC] go in; [0.65, 2150] come out
 
 Out - In: 
 
-[0.65, 2150] - [1.1, 1100] = [-0.45, 1050]
+- [0.65, 2150] - [1.1, 1100] = [-0.45, 1050]
 
 The difference in accounting is important as it more accurately allows for single unit of account
 measures (i.e., USD) of value gained or lost; and better comparison of the opportunity cost (holding 
@@ -783,12 +791,9 @@ the cost basis; 3 withdrawals; and a single total fees row priced at the positio
 
 accounting <- function(id_lp_actions, id_fees, eth_prices){
   
-  id_lp_actions$eth_price <- sapply(id_lp_actions$BLOCK_NUMBER, 
-                                 market_eth_price_at_block, 
-                                 eth_prices = eth_prices)
-  
-  
-  # cost basis negative for subtraction 
+  id_lp_actions$eth_price <- market_eth_price_at_block(eth_prices, id_lp_actions$BLOCK_NUMBER)
+
+    # cost basis negative for subtraction 
   cost_basis <- id_lp_actions %>% filter(ACTION == "INCREASE_LIQUIDITY") %>% 
     mutate(
       token0 = -1*AMOUNT0_ADJUSTED,
