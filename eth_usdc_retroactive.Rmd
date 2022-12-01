@@ -688,7 +688,7 @@ Adjusting for this would make the fee table look like this instead:
 
 ```{r}
 
-# if ALL matching transactions show fees collected > withdrawal amount for ALL tokens
+# if ALL matching transactions show fees collected >= withdrawal amount for ALL tokens
 # remove withdrawal from collected to fix double counting. 
 
 fee_correction <- function(id_fees, id_lp_actions){
@@ -707,7 +707,7 @@ fee_correction <- function(id_fees, id_lp_actions){
     # fix by subtracting the double counting
     # note: it is assumed transactions are ordered by block number for alignment to work
     if( 
-      mean(id_fees[fee_tx_in_lp, amount_cols] > id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
+      mean(id_fees[fee_tx_in_lp, amount_cols] >= id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
       
       id_fees[fee_tx_in_lp, amount_cols] <- {
         id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
@@ -719,7 +719,7 @@ fee_correction <- function(id_fees, id_lp_actions){
         for(i in id_fees$TX_HASH[fee_tx_in_lp]){
           if(
           mean(
-            id_fees[id_fees$TX_HASH == i, amount_cols] > 
+            id_fees[id_fees$TX_HASH == i, amount_cols] >= 
             id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
             ) == 1
           ){
@@ -913,14 +913,73 @@ For everyone position we must go through the same steps as done for `96877`:
 
 ## Unique Identifer Problem 
 
+This section will be updated upon completion of some data adjustments. For now, 
+for NFT Positions without an NF_TOKEN_ID, there is a misalignment of the unique identifier 
+between LP_ACTIONS and the FEES tables. This is especially prevalent when users use a Uni v3 
+Vault (e.g., Visor) to participate in managed group positions. The LP_ACTIONS table treats
+Visor as the LIQUIDITY_PROVIDER for managed positions without an NF_TOKEN_ID, while FEES treats 
+the individual withdrawing from a Visor position as the LIQUIDITY_PROVIDER for a managed positions.
+
+Because we cannot identify transfers of Visor (or other vault) tokens, the LIQUIDITY_PROVIDER 
+breaks the ability to identify a closed position with a unique ID when an NF_TOKEN_ID is not available (i.e., 
+someone could collect fees for a position they didn't open and there is no unique ID to clarify when it was opened).
+
+The incoming fix is to align LIQUIDITY_PROVIDER in both tables to the FEES table (individual withdrawing)
+and ensure NF_POSITION_MANAGER is never `NULL` by moving the manager contract (e.g., Visor's ETH-USDC Vault)
+as the NF_POSITION_MANAGER. 
+
+This makes it possible to use NF_POSITION_MANAGER-TICK_LOWER-TICK_UPPER as a unique ID for grouped managed positions
+and understand PnL at the manager (e.g., Visor) level. Which makes more sense as this analysis is not focused on 
+individuals, but the positions individuals (including Visor as the manager of many people's positions) make.
+
+For now, we will continue by filtering to only those positions where an NF_TOKEN_ID is available.
+
 ```{r}
-closed_lp_actions <- lp_actions[lp_actions$unique_id %in% closed_positions$unique_id, ]
+
+closed_fees <- fees %>% 
+  filter( !is.na(NF_TOKEN_ID) & unique_id %in% closed_positions$unique_id)
+closed_lp_actions <- lp_actions %>% 
+  filter( !is.na(NF_TOKEN_ID) &  unique_id %in% closed_positions$unique_id)
+
+closed_lp_w_fees <- closed_lp_actions %>% filter(
+  unique_id %in% closed_fees$unique_id
+)
+
+```
+
+Of the `r length(unique(closed_lp_actions$unique_id))` unique closed positions 
+`r sum(! unique(closed_lp_actions$unique_id) %in% unique(closed_fees$unique_id))` did not collect their 
+fees. So we will filter to the `r length(unique(closed_lp_w_fees$unique_id))` positions that can have their post-fees 
+PnL and reference values calculated.
+
+
+## Double Check the Fee collection quirk
+
+```{r}
+
+# split automatically alphabetizes
+id_fees_list <- split(closed_fees, f = closed_fees$unique_id)
+id_lp_list <- split(closed_lp_w_fees, f = closed_lp_w_fees$unique_id)
+
+# If the order of IDs don't exactly match note the problem 
+if(
+   ! identical(names(id_lp_list), names(id_fees_list))
+) {
+  stop("List of IDs are not aligned")
+}
+
 
 
 ```
 
+## Create the position specific accounting table
 
 
+## Determine total PnL over the position lifecycle
+
+## Identify the Opportunity Cost (HODL Reference Value)
+
+## Identify the Resulting Value (Strategy Reference Value)
 
 
 
