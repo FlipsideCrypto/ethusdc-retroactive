@@ -734,7 +734,7 @@ Adjusting for this would make the fee table look like this instead:
 # remove withdrawal from collected to fix double counting. 
 
 fee_correction <- function(id_fees, id_lp_actions){
-  
+  browser()
   fee_tx_in_lp = (id_fees$TX_HASH %in% id_lp_actions$TX_HASH)
   lp_tx_in_fee = (id_lp_actions$TX_HASH %in% id_fees$TX_HASH)
   amount_cols = c("AMOUNT0_ADJUSTED", "AMOUNT1_ADJUSTED")
@@ -748,7 +748,7 @@ fee_correction <- function(id_fees, id_lp_actions){
     # both tables have fees collected double counting withdrawals;
     # fix by subtracting the double counting
     # note: it is assumed transactions are ordered by block number for alignment to work
-    if( 
+    if( sum(fee_tx_in_lp) == sum(lp_tx_in_fee) &
       mean(id_fees[fee_tx_in_lp, amount_cols] >= id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
       
       id_fees[fee_tx_in_lp, amount_cols] <- {
@@ -963,39 +963,30 @@ For everyone position we must go through the same steps as done for `96877`:
 4. Identify the Opportunity Cost (HODL Reference Value)
 5. Identify the Resulting Value (Strategy Reference Value)
 
-## Unique Identifer Problem 
+## Unique Identifers 
 
-This section will be updated upon completion of some data adjustments. For now, 
-for NFT Positions without an NF_TOKEN_ID, there is a misalignment of the unique identifier 
-between LP_ACTIONS and the FEES tables. This is especially prevalent when users use a Uni v3 
-Vault (e.g., Visor) to participate in managed group positions. The LP_ACTIONS table treats
-Visor as the LIQUIDITY_PROVIDER for managed positions without an NF_TOKEN_ID, while FEES treats 
-the individual withdrawing from a Visor position as the LIQUIDITY_PROVIDER for a managed positions.
+Because non-Uniswap NFT Position Managers (e.g., Gamma.xyz) may or may not have transferable
+ownership of individual assets within a grouped position, the LIQUIDITY_PROVIDER may or may not 
+be consistent for a single NFT Position without an NF_TOKEN_ID (the ideal unique identifier).
 
-Because we cannot identify transfers of Visor (or other vault) tokens, the LIQUIDITY_PROVIDER 
-breaks the ability to identify a closed position with a unique ID when an NF_TOKEN_ID is not available (i.e., 
-someone could collect fees for a position they didn't open and there is no unique ID to clarify when it was opened).
+Thus, the logical backup position identifier would be to focus on the Manager-position relationship 
+as the direct intermediary between a person and Uniswap v3. 
 
-The incoming fix is to align LIQUIDITY_PROVIDER in both tables to the FEES table (individual withdrawing)
-and ensure NF_POSITION_MANAGER is never `NULL` by moving the manager contract (e.g., Visor's ETH-USDC Vault)
-as the NF_POSITION_MANAGER. 
-
-This makes it possible to use NF_POSITION_MANAGER-TICK_LOWER-TICK_UPPER as a unique ID for grouped managed positions
-and understand PnL at the manager (e.g., Visor) level. Which makes more sense as this analysis is not focused on 
-individuals, but the positions individuals (including Visor as the manager of many people's positions) make.
-
-For now, we will continue by filtering to only those positions where an NF_TOKEN_ID is available.
+NF_POSITION_MANAGER_ADDRESS--TICK_LOWER--TICK_UPPER is used as unique ID for grouped managed positions to understand PnL at the manager-position level. Which makes more sense as this analysis is not focused on 
+individuals, but the positions individuals (including Vaults as manager of many people's positions) make.
 
 ```{r}
 
 closed_fees <- fees %>% 
-  filter( !is.na(NF_TOKEN_ID) & unique_id %in% closed_positions$unique_id)
+  filter(unique_id %in% closed_positions$unique_id) %>% 
+  arrange(BLOCK_NUMBER)
+
 closed_lp_actions <- lp_actions %>% 
-  filter( !is.na(NF_TOKEN_ID) &  unique_id %in% closed_positions$unique_id)
+  filter(unique_id %in% closed_positions$unique_id)
 
 closed_lp_w_fees <- closed_lp_actions %>% filter(
   unique_id %in% closed_fees$unique_id
-)
+) %>% arrange(BLOCK_NUMBER)
 
 ```
 
@@ -1004,13 +995,26 @@ Of the `r length(unique(closed_lp_actions$unique_id))` unique closed positions
 fees. So we will filter to the `r length(unique(closed_lp_w_fees$unique_id))` positions that can have their post-fees 
 PnL and reference values calculated.
 
-
 ## Double Check the Fee collection quirk
 
 By ensuring all fee collections are 1:1 at the tx_hash-unique_id level; we get a single fees 
 row per fee collection and then remove the double counting once, i.e., for transactions where
 fees are collected, then liquidity is removed, then fees are collected again (it happens rarely)
 the collections are combined prior to correction. 
+
+```{r}
+max_tx_hash_unique_id_pairs_in_fees <- closed_fees %>% 
+  group_by(TX_HASH, unique_id) %>% 
+  summarise(n = n(), .groups = "drop") %>% 
+  summarise(max = max(n))
+
+```
+
+We can confirm that the maximum fee rows for a tx_hash-unique_id pair is 
+`r max_tx_hash_unique_id_pairs_in_fees$max`.
+
+The next step is to remove any double counting of withdrawals within fees because 
+the Uniswap v3 contract can bundle both as a Collect() action.
 
 ```{r}
 
@@ -1026,15 +1030,16 @@ if(
 }
 
 # otherwise run through the list of fees and correct them 
-
+# NOTE fee_correction only safe to use when split by unique_id
+# Possible for a tx_hash to include multiple position interactions
 id_fees_fixed <- lapply(1:length(id_fees_list), 
-                       FUN = function(i){
-                         tryCatch(
-                           fee_correction(id_fees_list[[i]], id_lp_list[[i]]), error = function(e){
-                             print(paste0("Error found in position: ", i))
-                           }  
-                         )
-                       }
+                        FUN = function(i){
+                          tryCatch(
+                            fee_correction(id_fees_list[[i]], id_lp_list[[i]]), error = function(e){
+                              print(paste0("Error found in position: ", i))
+                            }  
+                          )
+                        }
 )
 
 
