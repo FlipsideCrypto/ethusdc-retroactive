@@ -511,6 +511,17 @@ fees[custom_index,"unique_id"] <- paste0(fees[custom_index, "LIQUIDITY_PROVIDER"
                                                 "-",
                                                 fees[custom_index, "TICK_UPPER"])
 
+# also while here, ensure only 1 fee collection row per tx_hash, i.e., just add them
+fees <- fees %>% 
+  group_by(across(c(-AMOUNT0_ADJUSTED, -AMOUNT1_ADJUSTED))) %>% 
+  summarise(
+  AMOUNT0_ADJUSTED = sum(AMOUNT0_ADJUSTED),
+  AMOUNT1_ADJUSTED = sum(AMOUNT1_ADJUSTED), .groups = "drop") %>%  
+  relocate(c(AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED), .after = NF_TOKEN_ID) %>% 
+  as.data.frame()
+
+
+
 # remove DECREASE_LIQUIDITY where LIQUIDITY == 0 
 # this is just a collect fees action. Fees will be identified separately
 lp_actions_only_add_removes <- lp_actions %>% filter(
@@ -957,7 +968,7 @@ PnL and reference values calculated.
 
 ```{r}
 
-# split automatically alphabetizes
+# split automatically alphabetizes by ID # 
 id_fees_list <- split(closed_fees, f = closed_fees$unique_id)
 id_lp_list <- split(closed_lp_w_fees, f = closed_lp_w_fees$unique_id)
 
@@ -968,6 +979,17 @@ if(
   stop("List of IDs are not aligned")
 }
 
+# otherwise run through the list of fees and correct them 
+
+id_fees_fixed <- lapply(1:length(id_fees_list), 
+                       FUN = function(i){
+                         tryCatch(
+                           fee_correction(id_fees_list[[i]], id_lp_list[[i]]), error = function(e){
+                             print(paste0("Error found in position: ", i))
+                           }  
+                         )
+                       }
+)
 
 
 ```
