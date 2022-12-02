@@ -1,5 +1,5 @@
 ---
-title: "eth-usdc-DL"
+title: "Retroactive PnL for ETHUSDC 0.05%"
 author: "Charliemarketplace"
 date: "`r Sys.Date()`"
 output:
@@ -14,8 +14,15 @@ editor_options:
 
 # Intro
 
-This is an exhaustive review of the historical divergent loss (DL) of the ETH-USDC 0.05% Uniswap v3 pool.
-As of a block height of 15,576,600 (September 20, 2022) it reviews *all* changes in liquidity, trades in the pool, and accumulated fees to identify the profit and loss of every unique position. 
+This is a Profit and Loss calculation including potential divergent loss (DL) of all closed positions in the ETH-USDC 0.05% Uniswap v3 pool from inception of the pool up to the  block height of 15,576,600 (September 20, 2022). It reviews *all* changes in liquidity and accumulated fees to identify the profit and loss of every unique position across 3 accountings: 
+
+- Direct Profit & Loss, accounting for price changes in the underlying assets
+-  Opportunity Cost, i.e.,  HODL Reference Value: what assets deposited would have been worth as of the block where the position was closed.
+- Realized Value, i.e., Strategy Reference Value: what the assets withdrawn were worth as of the block where the position was closed including accumulated fees.
+
+Direct P&L is useful for understanding gains in the context of changing prices, here, P&L is measured in both USD and ETH terms. 
+
+Divergent Loss (sometimes called Impermanent Loss) is the difference between the results of using a strategy (here, fees and automatic market making in Uniswap v3) and the counter factual: the amount of assets if one were *not* to have used the strategy. 
 
 # Data Collection 
 
@@ -540,6 +547,11 @@ lp_actions[custom_index, "unique_id"] <- paste0(lp_actions[custom_index, "NF_POS
                                                 "--",
                                                 lp_actions[custom_index, "TICK_UPPER"])
 
+# adding Eth Market Price from eth_prices to lp_actions via merge for later 
+lp_actions <- merge(lp_actions, y = eth_prices, all.x = TRUE, all.y = FALSE, by = "BLOCK_NUMBER")
+
+rm(eth_prices)
+
 # while here do fees too
 fees$unique_id <- fees$NF_TOKEN_ID
 custom_index <- which(is.na(fees$unique_id))
@@ -600,16 +612,7 @@ The following method is used to assess the reference price at any block height.
 
 In testing, this rolling median methodology had much less volatility compared to simple lagged VWAP or taking the block level VWAP directly.
 
-The `eth_prices` dataset calculable from `collect_data.R` reproduces this methodology to get block level MARKET_ETH_PRICE. 
-```{r}
-
-market_eth_price_at_block <- function(eth_prices, block){
- eth_prices$eth_price[eth_prices$BLOCK_NUMBER %in% block]
-}
-
-```
-
-For example, the market price at block 15000000 would be `r market_eth_price_at_block(eth_prices, 15000000)` USD.
+The `eth_prices` dataset calculable from `collect_data.R` reproduces this methodology to get block level eth_price. 
 
 ### Profit & Loss
 
@@ -677,7 +680,7 @@ p96877 <- lp_actions %>% filter(NF_TOKEN_ID == 96877) %>%
   select(BLOCK_NUMBER, TX_HASH, 
          ACTION, AMOUNT0_ADJUSTED, 
          AMOUNT1_ADJUSTED, 
-         LIQUIDITY) %>% 
+         LIQUIDITY, eth_price) %>% 
   mutate(liquidity_signed = ifelse(
     ACTION == "DECREASE_LIQUIDITY", 
     LIQUIDITY * -1,
@@ -797,11 +800,7 @@ the cost basis; 3 withdrawals; and a single total fees row priced at the positio
 
 ```{r}
 
-accounting <- function(id_lp_actions, id_fees, eth_prices){
-
-  # add eth_price column via merge
-  id_lp_actions <- merge(x = id_lp_actions, y = eth_prices, 
-                         all.x = TRUE, all.y = FALSE, by = "BLOCK_NUMBER")
+accounting <- function(id_lp_actions, id_fees){
 
     # cost basis negative for subtraction 
   cost_basis <- id_lp_actions %>% filter(ACTION == "INCREASE_LIQUIDITY") %>% 
@@ -828,7 +827,7 @@ accounting <- function(id_lp_actions, id_fees, eth_prices){
   )
   
   # price fees at position closure, i.e., last withdrawal
-  fees$eth_price <- tail(withdrawals$eth_price)
+  fees$eth_price <- tail(withdrawals$eth_price, n = 1)
   
   accounting_tbl <- rbind(cost_basis, withdrawals, fees)
   
@@ -836,7 +835,7 @@ accounting <- function(id_lp_actions, id_fees, eth_prices){
   
 }
 
-a96877 <- accounting(id_lp_actions = p96877, id_fees = f96877, eth_prices = eth_prices)
+a96877 <- accounting(id_lp_actions = p96877, id_fees = f96877)
 
 reactable(
   a96877
@@ -997,7 +996,7 @@ closed_lp_actions <- lp_actions %>%
 closed_lp_w_fees <- closed_lp_actions %>% filter(
   unique_id %in% closed_fees$unique_id
 ) %>% arrange(BLOCK_NUMBER) %>% 
-  select(BLOCK_NUMBER, TX_HASH, unique_id, ACTION, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED)
+  select(BLOCK_NUMBER, TX_HASH, unique_id, ACTION, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED, eth_price)
 
 ```
 
@@ -1043,15 +1042,14 @@ if(
 # otherwise run through the list of fees and correct them 
 # NOTE fee_correction only safe to use when split by unique_id
 # Possible for a tx_hash to include multiple position interactions
+
 id_fees_fixed <- lapply(1:length(id_fees_list), 
                         FUN = function(i){
-                          tryCatch(
-                            fee_correction(id_fees_list[[i]], id_lp_list[[i]]), error = function(e){
-                              print(paste0("Error found in position: ", i))
-                            }  
-                          )
-                        }
-)
+                          fee_correction(id_fees_list[[i]], id_lp_list[[i]])
+                        })
+
+# cleanup 
+rm(closed_lp_actions, closed_fees, closed_lp_actions, id_fees_list)
 
 
 ```
@@ -1063,7 +1061,7 @@ we can create `r length(id_fees_fixed)` accounting tables.
 
 ```{r}
 # fix this 
-accounting(id_lp_actions = id_lp_list[[68]],id_fees = id_fees_fixed[[68]], eth_prices = eth_prices)
+accounting(id_lp_actions = id_lp_list[[68]],id_fees = id_fees_fixed[[68]])
 
 ```
 
@@ -1073,34 +1071,48 @@ id_accounting <- lapply(1:length(id_fees_fixed),
                         FUN = function(i){
                           tryCatch(
                           accounting(id_lp_actions = id_lp_list[[i]],
-                                     id_fees = id_fees_fixed[[i]],
-                                     eth_prices = eth_prices), error = function(e){
+                                     id_fees = id_fees_fixed[[i]]), error = function(e){
                               print(paste0("Error found in position: ", i))
                             })  
                         })
 
+names(id_accounting) <- names(id_lp_list)
+
+# to simplify segmentation of analysis saving this
+saveRDS(id_accounting, "post_accounting.rds")
+
 ```
 
-## Determine total PnL over the position lifecycle
+# PnL, Opportunity Cost, and Realized Value
 
+With the accounting table generated for every closed position, we can now calculate
+the profit & loss, Opportunity Cost (HODL Reference Value), and Realized Value (Strategy Reference Value) from position opening to closing using block level eth pricing. 
+
+20 rows of results are provided. A full analysis of these accounting results will be written 
+up separately.
 
 ```{r}
+# for brevity read id_accounting to continue here
+id_accounting <- readRDS("post_accounting.rds")
 
+id_pnl <- lapply(id_accounting, pnl)
+pnl_results <- bind_rows(id_pnl, .id = "unique_id")
 
+id_hodl <- lapply(id_accounting, hodl_reference)
+hodl_results <- bind_rows(id_hodl, .id = "unique_id")
+
+id_strat <- lapply(id_accounting, strategy_reference)
+strategy_results <- bind_rows(id_strat, .id = "unique_id")
+
+ethusdc_results <- merge(pnl_results, hodl_results, by = "unique_id")
+ethusdc_results <- merge(ethusdc_results, strategy_results, by = "unique_id")
+
+saveRDS(ethusdc_results)
+
+reactable(
+  ethusdc_results[1:20, ]
+)
 ```
-
-## Identify the Opportunity Cost (HODL Reference Value)
-
-## Identify the Resulting Value (Strategy Reference Value)
-
-
-
-
-
-
-
-
-
 
 
 
