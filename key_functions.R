@@ -1,5 +1,90 @@
 library(gmp) # big int math
 
+fee_correction <- function(id_fees, id_lp_actions){
+  
+  # fee-collection problem only occurs in decrease_liquidity
+  # sometimes in the same transaction the same exact liquidity is added and immediately removed
+  # occurs in poorly written NF_POSITION_MANAGERS.
+  
+  id_lp_actions <- id_lp_actions %>% filter(ACTION == "DECREASE_LIQUIDITY")
+  
+  fee_tx_in_lp = (id_fees$TX_HASH %in% id_lp_actions$TX_HASH)
+  lp_tx_in_fee = (id_lp_actions$TX_HASH %in% id_fees$TX_HASH)
+  amount_cols = c("AMOUNT0_ADJUSTED", "AMOUNT1_ADJUSTED")
+  
+  # if there are no tx hashes in both tables move on 
+  if(sum(fee_tx_in_lp) == 0){
+    return(id_fees)
+    
+  } else { 
+    # if it perfectly lines up that ALL tx hashes in 
+    # both tables have fees collected double counting withdrawals;
+    # fix by subtracting the double counting
+    # note: it is assumed transactions are ordered by block number for alignment to work
+    if(sum(fee_tx_in_lp) == sum(lp_tx_in_fee)){
+      if(mean(id_fees[fee_tx_in_lp, amount_cols] >= id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
+        id_fees[fee_tx_in_lp, amount_cols] <- {
+          id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
+        }
+      }
+    } else { 
+      # else go 1 by one to overlapping tx and check again
+      
+      for(i in id_fees$TX_HASH[fee_tx_in_lp]){
+        if(
+          mean(
+            id_fees[id_fees$TX_HASH == i, amount_cols] >= 
+            id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+          ) == 1
+        ){
+          id_fees[id_fees$TX_HASH == i, amount_cols] <- {
+            id_fees[id_fees$TX_HASH == i, amount_cols]  - 
+              id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+          }
+        } else next()
+      }
+    }
+    
+    return(id_fees)
+  }
+}
+
+accounting <- function(id_lp_actions, id_fees, price_col){
+  
+  # cost basis negative for subtraction 
+  cost_basis <- id_lp_actions %>% filter(ACTION == "INCREASE_LIQUIDITY") %>% 
+    mutate(
+      token0 = -1*AMOUNT0_ADJUSTED,
+      token1 = -1*AMOUNT1_ADJUSTED,
+      accounting = "cost_basis"
+    ) %>% 
+    select(BLOCK_NUMBER, accounting, token0, token1, all_of(price_col))
+  
+  withdrawals <- id_lp_actions %>% filter(ACTION == "DECREASE_LIQUIDITY") %>% 
+    mutate(
+      token0 = AMOUNT0_ADJUSTED,
+      token1 = AMOUNT1_ADJUSTED,
+      accounting = "withdrawal"
+    ) %>% 
+    select(BLOCK_NUMBER, accounting, token0, token1, all_of(price_col))
+  
+  fees <- data.frame(
+    BLOCK_NUMBER = max(withdrawals$BLOCK_NUMBER),
+    accounting = "fee revenue",
+    token0 = sum(id_fees$AMOUNT0_ADJUSTED),
+    token1 = sum(id_fees$AMOUNT1_ADJUSTED)
+  )
+  
+  # price fees at position closure, i.e., last withdrawal
+  fees[[price_col]] <- tail(withdrawals[[price_col]], n = 1)
+  
+  accounting_tbl <- rbind(cost_basis, withdrawals, fees)
+  
+  return(accounting_tbl)
+  
+}
+
+
 get_eth_price <- function(min_block, max_block, api_key){
   price_query <- {
     "
@@ -48,6 +133,51 @@ ORDER BY BLOCK_NUMBER DESC
   
   prices = auto_paginate_query(price_query, api_key = api_key)
 }
+
+get_ethbtc_price <- function(min_block, max_block, api_key){
+  
+ price_query <- {
+    "
+    with uniswap_btc_eth_swaps AS (
+SELECT * FROM ethereum.uniswapv3.ez_swaps WHERE POOL_ADDRESS IN (
+'0xcbcdf9626bc03e24f779434178a73a0b4bad62ed', -- wbtc ETH 0.3%
+'0x4585fe77225b41b697c938b018e2ac67ac5a20c0' -- wbtc ETH 0.05% 
+    ) AND 
+BLOCK_NUMBER >= _min_block_ AND 
+BLOCK_NUMBER <= _max_block_
+  ),
+    
+btc_eth_price AS (
+SELECT BLOCK_NUMBER, BLOCK_TIMESTAMP, 
+IFF(TOKEN1_SYMBOL = 'WBTC', ABS(DIV0(AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED)), 
+           ABS(DIV0(AMOUNT1_ADJUSTED, AMOUNT0_ADJUSTED))
+   ) as btc_eth_trade_price,
+  IFF(TOKEN1_SYMBOL = 'WBTC', ABS(AMOUNT1_ADJUSTED), ABS(AMOUNT0_ADJUSTED)) as btc_volume,
+IFF(TOKEN1_SYMBOL = 'WBTC', TOKEN0_SYMBOL, TOKEN1_SYMBOL) as eth           
+           FROM uniswap_btc_eth_swaps
+   		 WHERE ABS(AMOUNT0_ADJUSTED) > 1e-8 AND ABS(AMOUNT1_ADJUSTED) > 1e-8
+),
+
+btc_block_price AS ( 
+SELECT BLOCK_NUMBER, BLOCK_TIMESTAMP, 
+  div0(SUM(btc_eth_trade_price * btc_volume),sum(btc_volume)) as btc_wavg_price,
+  SUM(btc_volume) as btc_volume,
+  COUNT(*) as num_swaps
+    FROM btc_eth_price
+    GROUP BY BLOCK_NUMBER, BLOCK_TIMESTAMP
+)
+
+SELECT * FROM btc_block_price
+ORDER BY BLOCK_NUMBER DESC
+    "
+  }
+  
+  price_query <- gsub("_min_block_", min_block, price_query)
+  price_query <- gsub("_max_block_", max_block, price_query)
+  
+  prices = auto_paginate_query(price_query, api_key = api_key)
+}
+
 
 market_eth_price_at_block <- function(eth_prices, block){
   eth_prices[eth_prices$BLOCK_NUMBER == block, "ETH_MARKET_PRICE"]

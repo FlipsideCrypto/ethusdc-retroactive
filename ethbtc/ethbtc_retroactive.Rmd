@@ -1,0 +1,286 @@
+---
+title: "eth_btc_retroactive"
+author: "Charliemarketplace"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: false
+editor_options:
+  chunk_output_type: console
+---
+
+# Intro
+
+This is a Profit and Loss calculation including potential divergent loss (DL) of all closed positions in the ETH-WBTC 0.3% Uniswap v3 pool from inception of the pool up to the  block height of 15,576,600 (September 20, 2022). It reviews *all* changes in liquidity and accumulated fees to identify the profit and loss of every unique position across 3 accountings: 
+
+- Direct Profit & Loss, accounting for price changes in the underlying assets
+-  Opportunity Cost, i.e.,  HODL Reference Value: what assets deposited would have been worth as of the block where the position was closed.
+- Realized Value, i.e., Strategy Reference Value: what the assets withdrawn were worth as of the block where the position was closed including accumulated fees.
+
+Direct P&L is useful for understanding gains in the context of changing prices, here, P&L is measured in both ETH and BTC terms. 
+
+Divergent Loss (sometimes called Impermanent Loss) is the difference between the results of using a strategy (here, fees and automatic market making in Uniswap v3) and the counter factual: the amount of assets if one were *not* to have used the strategy. 
+A more in depth view on definitions and calculations is available in the ETH USDC Retroactive over the same time range.
+
+# Data Collection 
+
+The `collect_ethbtc_data.R` script included in this repo uses the Flipside Crypto's shroomDK API to pull all the relevant data. For brevity, this markdown reads from a saved RDS copy *not* available in the repo. To reproduce this analysis, you can run the `collect_ethbtc_data.R` script using your own shroomDK API key available for free.
+
+```{r}
+library(gmp) # large numbers
+library(reactable) # clean tables
+library(dplyr) # data manipulation
+options(scipen = 10)
+
+source("../key_functions.R")
+
+lp_actions <- readRDS("ethbtc_lp_actions.rds")
+
+# remove actions that don't remove liquidity, these are fee collection events
+lp_actions <- lp_actions %>% filter(LIQUIDITY != 0)
+
+fees <- readRDS("ethbtc_fees.rds")
+btc_prices <- readRDS("ethbtc_prices.rds")
+btc_prices <- btc_prices[,c("BLOCK_NUMBER", "BTC_MARKET_PRICE")]
+colnames(btc_prices) <- c("BLOCK_NUMBER","btc_price")
+
+```
+
+### Closed Positions at Block Height
+
+```{r}
+lp_actions$unique_id <- lp_actions$NF_TOKEN_ID
+
+custom_index <- which(is.na(lp_actions$unique_id))
+
+lp_actions[custom_index, "unique_id"] <- paste0(lp_actions[custom_index, "NF_POSITION_MANAGER_ADDRESS"],
+                                                "--",
+                                                lp_actions[custom_index, "TICK_LOWER"],
+                                                "--",
+                                                lp_actions[custom_index, "TICK_UPPER"])
+
+# adding BTC Market Price from btc_prices to lp_actions via merge for later 
+lp_actions <- merge(lp_actions, y = btc_prices, all.x = TRUE, all.y = FALSE, by = "BLOCK_NUMBER")
+
+# manual insertion of first price 
+lp_actions$btc_price[is.na(lp_actions$btc_price)] <- 16.07226
+
+# while here do fees too
+fees$unique_id <- fees$NF_TOKEN_ID
+custom_index <- which(is.na(fees$unique_id))
+fees[custom_index,"unique_id"] <- paste0(fees[custom_index, "NF_POSITION_MANAGER_ADDRESS"],
+                                                "--",
+                                                fees[custom_index, "TICK_LOWER"],
+                                                "--",
+                                                fees[custom_index, "TICK_UPPER"])
+
+# also while here, ensure only 1 fee collection row per tx_hash, i.e., just add them
+
+fees <- fees %>% 
+  group_by(across(c(-AMOUNT0_ADJUSTED, -AMOUNT1_ADJUSTED))) %>% 
+  summarise(
+  AMOUNT0_ADJUSTED = sum(AMOUNT0_ADJUSTED),
+  AMOUNT1_ADJUSTED = sum(AMOUNT1_ADJUSTED), .groups = "drop") %>%  
+  relocate(c(NF_TOKEN_ID, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED), .after = NF_TOKEN_ID) %>% 
+  as.data.frame()
+
+
+liquidity_at_timestamp <- lp_actions %>% mutate(
+  liquidity_signed = ifelse(ACTION == "DECREASE_LIQUIDITY", LIQUIDITY * -1, LIQUIDITY)
+) %>% group_by(unique_id) %>% 
+  summarise(sumliq = sum(liquidity_signed))
+
+# due to some large number precision errors, some liquidity may be technically negative 
+# but effectively 0 for our purposes.
+closed_positions <- liquidity_at_timestamp %>% filter(sumliq <= 0)
+
+```
+
+There are `r nrow(closed_positions)` ETH-BTC 0.3% closed positions, including vaults, as of Sept 20, 2022.
+
+## Functions
+
+```{r}
+price_col = "btc_price"
+
+pnl <- function(id_accounting, t0col, t1col, price_col, price_base = "t1/t0"){
+  
+  # allow user to choose the base that is easier to read
+  # e.g., usdc/eth may be easier to read than eth/usdc; which means t0/t1 instead of t1/t0
+  # while ETH/BTC may be easier than BTC/ETH; which is t1/t0 the default!
+  
+  if(price_base == 't1/t0'){
+     pnl = data.frame(
+      pnl_t0_terms = sum(id_accounting$token0, (id_accounting$token1/id_accounting[[price_col]])),
+      pnl_t1_terms = sum(id_accounting$token1, (id_accounting$token0*id_accounting[[price_col]]))
+    )
+  } else if(price_base == 't0/t1'){
+    pnl = data.frame(
+      pnl_t0_terms = sum(id_accounting$token0, (id_accounting$token1*id_accounting[[price_col]])),
+      pnl_t1_terms = sum(id_accounting$token1, (id_accounting$token0/id_accounting[[price_col]]))
+    )
+  } else {
+    stop("price_base must be 't1/t0' (default) or 't0/t1'")
+  }
+ 
+
+colnames(pnl) <- c(t0col, t1col)
+
+return(pnl)
+}
+
+hodl_reference <- function(id_accounting, t0col, t1col, price_col, price_base = "t1/t0"){
+  
+  price_at_close_block = id_accounting[[price_col]][id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
+  
+  if(price_base == 't1/t0'){
+    hodl <- id_accounting %>% 
+      filter(accounting == 'cost_basis') %>% 
+      summarise(
+        hodl_t0_terms = abs(sum(token0) + sum(token1 / price_at_close_block)),
+        hodl_t1_terms = abs(sum(token1) + sum(token0 * price_at_close_block)),
+      )
+  } else if(price_base == 't0/t1'){
+    hodl <- id_accounting %>% 
+      filter(accounting == 'cost_basis') %>% 
+      summarise(
+        hodl_t0_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
+        hodl_t1_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
+      )
+  } else {
+    stop("price_base must be 't1/t0' (default) or 't0/t1'")
+  }
+  
+  colnames(hodl) <- c(t0col, t1col)
+  
+  return(hodl)
+}
+
+strategy_reference <- function(id_accounting, t0col, t1col, price_col, price_base = "t1/t0"){
+  
+  price_at_close_block = id_accounting[[price_col]][id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
+  
+  if(price_base == 't1/t0'){
+    strat <- id_accounting %>% 
+      filter(accounting != 'cost_basis') %>% 
+      summarise(
+        strategy_t0_terms = abs(sum(token0) + sum(token1 / price_at_close_block)),
+        strategy_t1_terms = abs(sum(token1) + sum(token0 * price_at_close_block)),
+      )
+  } else if(price_base == 't0/t1'){
+    strat <- id_accounting %>% 
+      filter(accounting != 'cost_basis') %>% 
+      summarise(
+        strategy_t0_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
+        strategy_t1_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
+      )
+  } else {
+    stop("price_base must be 't1/t0' (default) or 't0/t1'")
+  }
+  
+  colnames(strat) <- c(t0col, t1col)
+  return(strat)
+  
+}
+
+
+```
+
+# Fee Correction
+
+```{r}
+
+closed_fees <- fees %>% 
+  filter(unique_id %in% closed_positions$unique_id) %>% 
+  arrange(BLOCK_NUMBER)
+
+closed_lp_actions <- lp_actions %>% 
+  filter(unique_id %in% closed_positions$unique_id)
+
+closed_lp_w_fees <- closed_lp_actions %>% filter(
+  unique_id %in% closed_fees$unique_id
+) %>% arrange(BLOCK_NUMBER) %>% 
+  select(BLOCK_NUMBER, TX_HASH, unique_id, ACTION, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED, btc_price)
+
+
+# split automatically alphabetizes by ID # 
+id_fees_list <- split(closed_fees, f = closed_fees$unique_id)
+id_lp_list <- split(closed_lp_w_fees, f = closed_lp_w_fees$unique_id)
+
+# If the order of IDs don't exactly match note the problem 
+if(
+   ! identical(names(id_lp_list), names(id_fees_list))
+) {
+  stop("List of IDs are not aligned")
+}
+
+# otherwise run through the list of fees and correct them 
+# NOTE fee_correction only safe to use when split by unique_id
+# Possible for a tx_hash to include multiple position interactions
+
+id_fees_fixed <- lapply(1:length(id_fees_list), 
+                        FUN = function(i){
+                          fee_correction(id_fees_list[[i]], id_lp_list[[i]])
+                        })
+```
+
+### Accounting 
+
+```{r}
+aa <- accounting(id_lp_actions = id_lp_list[[100]], 
+           id_fees = id_fees_fixed[[100]], 
+           price_col = "btc_price")
+
+pnl(aa, "pnl_btc_terms", "pnl_eth_terms","btc_price")
+hodl_reference(aa, "hodl_btc_terms", "hodl_eth_terms","btc_price")
+strategy_reference(aa, "strat_btc_terms", "strat_eth_terms","btc_price")
+
+```
+
+```{r}
+
+id_accounting <- lapply(1:length(id_lp_list), 
+                        FUN = function(i){
+                          tryCatch(
+                          accounting(id_lp_actions = id_lp_list[[i]],
+                                     id_fees = id_fees_fixed[[i]],price_col = "btc_price"),
+                          error = function(e){
+                              print(paste0("Error found in position: ", i))
+                            })  
+                        })
+
+names(id_accounting) <- names(id_lp_list)
+
+# to simplify segmentation of analysis saving this
+saveRDS(id_accounting, "post_ethbtc_accounting.rds")
+
+# for brevity read id_accounting to continue here
+id_accounting <- readRDS("post_ethbtc_accounting.rds")
+
+id_pnl <- lapply(id_accounting, function(i){
+  pnl(i, "pnl_btc_terms", "pnl_eth_terms","btc_price")
+  })
+pnl_results <- bind_rows(id_pnl, .id = "unique_id")
+
+id_hodl <- lapply(id_accounting, function(i){
+  hodl_reference(i, "hodl_btc_terms", "hodl_eth_terms","btc_price")
+})
+
+hodl_results <- bind_rows(id_hodl, .id = "unique_id")
+
+id_strat <- lapply(id_accounting, function(i){
+  strategy_reference(i, "strat_btc_terms", "strat_eth_terms","btc_price")
+})
+
+strategy_results <- bind_rows(id_strat, .id = "unique_id")
+
+ethbtc_results <- merge(pnl_results, hodl_results, by = "unique_id")
+ethbtc_results <- merge(ethbtc_results, strategy_results, by = "unique_id")
+
+saveRDS(ethbtc_results, file = "ethbtc_results.rds")
+
+
+```

@@ -154,7 +154,6 @@ saveRDS(filled_eth_prices, "eth_prices.rds")
 ```{r, message = FALSE, warning = FALSE}
 library(gmp) # large numbers
 library(reactable) # clean tables
-library(plotly) # graphs
 library(dplyr) # data manipulation
 options(scipen = 10)
 
@@ -1049,7 +1048,7 @@ id_fees_fixed <- lapply(1:length(id_fees_list),
                         })
 
 # cleanup 
-rm(closed_lp_actions, closed_fees, closed_lp_actions, id_fees_list)
+rm(closed_lp_actions, closed_fees, id_fees_list)
 
 
 ```
@@ -1058,12 +1057,6 @@ rm(closed_lp_actions, closed_fees, closed_lp_actions, id_fees_list)
 
 Now with the fixed fee list organized by unique IDs and lp_actions list organized by unique IDs 
 we can create `r length(id_fees_fixed)` accounting tables.
-
-```{r}
-# fix this 
-accounting(id_lp_actions = id_lp_list[[68]],id_fees = id_fees_fixed[[68]])
-
-```
 
 ```{r}
 
@@ -1107,7 +1100,7 @@ strategy_results <- bind_rows(id_strat, .id = "unique_id")
 ethusdc_results <- merge(pnl_results, hodl_results, by = "unique_id")
 ethusdc_results <- merge(ethusdc_results, strategy_results, by = "unique_id")
 
-saveRDS(ethusdc_results)
+saveRDS(ethusdc_results, file = "ethusdc_results.rds")
 
 reactable(
   ethusdc_results[1:20, ]
