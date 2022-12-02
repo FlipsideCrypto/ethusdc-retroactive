@@ -160,6 +160,8 @@ lp_actions <- lp_actions %>% filter(LIQUIDITY != 0)
 
 fees <- readRDS("fees.rds")
 eth_prices <- readRDS("eth_prices.rds")
+eth_prices <- eth_prices[,c("BLOCK_NUMBER", "ETH_MARKET_PRICE")]
+colnames(eth_prices) <- c("BLOCK_NUMBER","eth_price")
 
 ```
 
@@ -602,7 +604,7 @@ The `eth_prices` dataset calculable from `collect_data.R` reproduces this method
 ```{r}
 
 market_eth_price_at_block <- function(eth_prices, block){
- eth_prices$ETH_MARKET_PRICE[eth_prices$BLOCK_NUMBER %in% block]
+ eth_prices$eth_price[eth_prices$BLOCK_NUMBER %in% block]
 }
 
 ```
@@ -797,13 +799,9 @@ the cost basis; 3 withdrawals; and a single total fees row priced at the positio
 
 accounting <- function(id_lp_actions, id_fees, eth_prices){
 
-  # fastest way to conditionally subset potentially duplicated blocks for pricing 
-  if(sum(duplicated(id_lp_actions$BLOCK_NUMBER)) == 0){
-  id_lp_actions$eth_price <- market_eth_price_at_block(eth_prices, id_lp_actions$BLOCK_NUMBER)  
-  } else {
-    id_lp_actions$eth_price <- sapply(id_lp_actions$BLOCK_NUMBER, market_eth_price_at_block, eth_prices = eth_prices)
-  }
-  
+  # add eth_price column via merge
+  id_lp_actions <- merge(x = id_lp_actions, y = eth_prices, 
+                         all.x = TRUE, all.y = FALSE, by = "BLOCK_NUMBER")
 
     # cost basis negative for subtraction 
   cost_basis <- id_lp_actions %>% filter(ACTION == "INCREASE_LIQUIDITY") %>% 
@@ -829,8 +827,8 @@ accounting <- function(id_lp_actions, id_fees, eth_prices){
     token1 = sum(id_fees$AMOUNT1_ADJUSTED)
   )
   
-  # price fees at position closure
-  fees$eth_price <- market_eth_price_at_block(eth_prices, block = max(withdrawals$BLOCK_NUMBER))
+  # price fees at position closure, i.e., last withdrawal
+  fees$eth_price <- tail(withdrawals$eth_price)
   
   accounting_tbl <- rbind(cost_basis, withdrawals, fees)
   
@@ -998,7 +996,8 @@ closed_lp_actions <- lp_actions %>%
 
 closed_lp_w_fees <- closed_lp_actions %>% filter(
   unique_id %in% closed_fees$unique_id
-) %>% arrange(BLOCK_NUMBER)
+) %>% arrange(BLOCK_NUMBER) %>% 
+  select(BLOCK_NUMBER, TX_HASH, unique_id, ACTION, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED)
 
 ```
 
