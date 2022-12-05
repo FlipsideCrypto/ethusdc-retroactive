@@ -29,7 +29,7 @@ A more in depth view on definitions and calculations is available in the ETH USD
 
 The `collect_ethbtc_data.R` script included in this repo uses the Flipside Crypto's shroomDK API to pull all the relevant data. For brevity, this markdown reads from a saved RDS copy *not* available in the repo. To reproduce this analysis, you can run the `collect_ethbtc_data.R` script using your own shroomDK API key available for free.
 
-```{r}
+```{r, warning = FALSE, message = FALSE}
 library(gmp) # large numbers
 library(reactable) # clean tables
 library(dplyr) # data manipulation
@@ -50,6 +50,8 @@ colnames(btc_prices) <- c("BLOCK_NUMBER","btc_price")
 ```
 
 ### Closed Positions at Block Height
+
+Identifying closed positions at block height. 
 
 ```{r}
 lp_actions$unique_id <- lp_actions$NF_TOKEN_ID
@@ -103,6 +105,7 @@ There are `r nrow(closed_positions)` ETH-BTC 0.3% closed positions, including va
 
 ## Functions
 
+pnl, hodl_reference, and strategy_reference functions.
 ```{r}
 price_col = "btc_price"
 
@@ -190,6 +193,8 @@ strategy_reference <- function(id_accounting, t0col, t1col, price_col, price_bas
 ```
 
 # Fee Correction
+Correcting for fees w/ known issue for rare Vault situation where liquidity is removed
+but not withdrawn in same transaction. Resulted in the only position to have >40% ROI above HODL (100% ROI above HODL).
 
 ```{r}
 
@@ -237,7 +242,6 @@ fixPosition1 = which(names(id_lp_list) == "248803")
 id_fees_fixed[[fixPosition1]][ , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- 
   id_fees_fixed[[fixPosition1]][ , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
   id_lp_list[[fixPosition1]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
-
 
 ```
 
@@ -295,6 +299,5 @@ ethbtc_results <- merge(pnl_results, hodl_results, by = "unique_id")
 ethbtc_results <- merge(ethbtc_results, strategy_results, by = "unique_id")
 
 saveRDS(ethbtc_results, file = "ethbtc_results.rds")
-
 
 ```
