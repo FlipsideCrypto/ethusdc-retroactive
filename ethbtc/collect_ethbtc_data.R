@@ -1,9 +1,39 @@
 library(shroomDK)
 library(zoo) # infill NAs & rolling Median
 source("../key_functions.R")
+
+
+# Swaps 
+
+# Large swap history 
+swap_spreads <- c(12360000, 13370000, 14370000, 14870000, 15370000, 15576600)
+swaps <- list()
+for(i in 1:5){
+  swap_query <- "
+  SELECT
+  BLOCK_NUMBER, BLOCK_TIMESTAMP,
+  TX_HASH,
+  TICK, AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED,
+  PRICE_1_0, PRICE_0_1
+  FROM     ethereum.uniswapv3.ez_swaps
+                    WHERE POOL_ADDRESS = '0xcbcdf9626bc03e24f779434178a73a0b4bad62ed' AND 
+                    BLOCK_NUMBER > min_block
+                    AND 
+                    BLOCK_NUMBER <= max_block
+                    ORDER BY BLOCK_NUMBER DESC
+  "
+  swap_query <- gsub("min_block", swap_spreads[i], swap_query)
+  swap_query <- gsub("max_block", swap_spreads[i+1], swap_query)
+  
+  swaps[[i]] <- auto_paginate_query(
+    query = swap_query,
+    api_key = readLines("api_key.txt")
+  )
+}
+
+all_swaps <- do.call(rbind, swaps)
+
 # LP Actions 
-
-
 
 ethbtc_lp_actions <- auto_paginate_query(
   query = "
@@ -86,6 +116,8 @@ BTC_MARKET_PRICE <- c(filled_ethbtc_prices$BTC_WAVG_PRICE[1:diff_median], BTC_MA
 filled_ethbtc_prices$BTC_MARKET_PRICE <- BTC_MARKET_PRICE
 
 # R Save Format 
+
+saveRDS(all_swaps, "ethbtc_swaps.rds")
 saveRDS(ethbtc_lp_actions, "ethbtc_lp_actions.rds")
 saveRDS(ethbtc_fees, "ethbtc_fees.rds")
 saveRDS(filled_ethbtc_prices, "ethbtc_prices.rds")

@@ -225,6 +225,20 @@ id_fees_fixed <- lapply(1:length(id_fees_list),
                         FUN = function(i){
                           fee_correction(id_fees_list[[i]], id_lp_list[[i]])
                         })
+
+## FORCED FEE CORRECTION
+
+#' In some instances liquidity removed, but NOT withdrawn, is collected 
+#' in a later transaction that cannot atomically (in same tx hash) be adjusted correctly.
+#' These unique IDs have had this issue manually confirmed.
+ 
+#' ID: 248803; position 4478
+fixPosition1 = which(names(id_lp_list) == "248803")
+id_fees_fixed[[fixPosition1]][ , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- 
+  id_fees_fixed[[fixPosition1]][ , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+  id_lp_list[[fixPosition1]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
+
+
 ```
 
 ### Accounting 

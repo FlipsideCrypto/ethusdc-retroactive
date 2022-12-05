@@ -1,0 +1,221 @@
+---
+title: "Analysis of ETH-WBTC Results"
+author: "Charliemarketplace"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r, warning = FALSE, message = FALSE}
+library(reactable)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+source("../key_functions.R")
+```
+
+# Data 
+
+Using the accounting results detailed in `ethbtc_retroactive.Rmd` and merging them 
+with metadata from unique Uniswap v3 positions available in `ethbtc_lp_actions.rds` (as detailed 
+in `collect_ethbtc_data.R`) to understand any patterns in Uniswap v3 positions profitability.
+
+- unique_id: The Uniswap v3 unique position, typically an NF_TOKEN_ID but for Vaults that 
+don't use NF_TOKEN_ID, the concatenation of NF_POSITION_MANAGER--TICK_LOWER--TICK_UPPER.
+
+- pnl_btc_terms: The profit and loss of a position over its lifecycle as measured in BTC, i.e., 
+did the position increase its value in BTC terms after adjusting for BTC's price changes (in ETH) and the AMM strategy, including fees accrued.
+
+- pnl_eth_terms: The profit and loss of a position over its lifecycle as measured in ETH, i.e., 
+did the position increase its value in ETH terms after adjusting for ETH's price changes (in BTC) and the AMM strategy, including fees accrued.
+
+- hodl_btc_terms: The value of the original assets in BTC terms at time of position closure.
+
+- hodl_eth_terms: The value of the original assets in ETH terms at time of position closure.
+
+- strat_btc_terms: The value of the assets removed from the position in BTC terms at time of position closure including fees acrrued.
+
+- strat_eth_terms: The value of the assets removed from the position in ETH terms at time of position closure including fees acrrued.
+
+```{r}
+lps <- readRDS("ethbtc_lp_actions.rds")
+swaps <- readRDS("ethbtc_swaps.rds")
+ethbtc <- readRDS("ethbtc_results.rds")
+ethbtc_accounts <- readRDS("post_ethbtc_accounting.rds")
+
+ethbtc[ , 2:7] <- ethbtc[ , 2:7] %>% round(., 4)
+
+reactable(ethbtc[200, ])
+
+```
+
+# Rates of Profitability
+
+Different positions will have different profit & loss (PnL), different original assets value at position closure (HODL Reference Value, i.e., Opportunity Cost), and different withdrawn assets value at position closure including fees (Strategy Reference Value, i.e., Realized Value).
+
+These assets are volatile, so pure PnL may not be the desired framework for assessing whether 
+participating in Uniswap v3 was a *good idea*. This is where Economic Profit Percent comes in. Economic Profit is the return on investment above the opportunity cost (here, doing nothing and not having participated in Uniswap v3).
+
+## PnL 
+
+Because of how AMMs work, over the lifespan of a position the relative value of ETH and BTC will determine the final makeup of the assets withdrawn. If ETH goes up in value against BTC, 
+positions will sell their ETH and accumulate BTC. Profit & Loss integrates price changes 
+to identify the change in value over time.
+
+### Example Table of Labels 
+
+To better detail the labels, here is a sample table explaining 
+how Breakeven, Profit, and Loss are applied in nuanced situations.
+
+```{r}
+reactable(
+  data.frame(
+    pnl_btc_terms = c(-1, -1, -1, 0, 0,  0, 1, 0,  1),
+    pnl_eth_terms = c(-1,  0,  1, -1, 0, 1, 1, 1, -1)
+  ) %>% mutate(
+    pnl = case_when(
+      pnl_btc_terms == 0 & pnl_eth_terms == 0 ~ "Breakeven",
+      pnl_btc_terms <= 0 & pnl_eth_terms <= 0 ~ "Both PnL Loss",
+      pnl_btc_terms > 0 & pnl_eth_terms <= 0 ~ "BTC PnL Only",
+      pnl_btc_terms <= 0 & pnl_eth_terms > 0 ~ "ETH PnL Only",
+      pnl_btc_terms > 0 & pnl_eth_terms > 0 ~ "Both PnL Profit"
+    )
+  )
+)
+```
+
+### Actual Results
+
+```{r}
+ethbtc <- ethbtc %>% mutate(
+  pnl = case_when(
+    pnl_btc_terms == 0 & pnl_eth_terms == 0 ~ "Breakeven",
+    pnl_btc_terms <= 0 & pnl_eth_terms <= 0 ~ "Both PnL Loss",
+    pnl_btc_terms > 0 & pnl_eth_terms <= 0 ~ "BTC PnL Only",
+    pnl_btc_terms <= 0 & pnl_eth_terms > 0 ~ "ETH PnL Only",
+    pnl_btc_terms > 0 & pnl_eth_terms > 0 ~ "Both PnL Profit"
+  )
+)
+
+key_barchart <- function(result, xlab = "Result", ylab = "Count", title){
+  r <- as.data.frame(table(result))
+  r$percent <- round(r$Freq/sum(r$Freq) * 100, digits = 2)
+  
+  plot_ly(r, x = ~result, y = ~Freq, type = "bar", text = ~paste0(percent,"%")) %>% 
+    layout(
+      title = list(text = title, y = 0.975),
+      xaxis = list(title = xlab),
+      yaxis = list(title = ylab)
+    )
+}
+```
+
+In general, positions gained in at least 1 form of PnL: 
+
+- `r round(sum(ethbtc$pnl == "BTC PnL Only")/nrow(ethbtc) * 100, 2)`% of positions net increased their value in *only* BTC terms. After accounting for price changes, they effectively sold ETH for BTC.
+
+- `r round(sum(ethbtc$pnl == "ETH PnL Only")/nrow(ethbtc) * 100, 2)`% of positions net increased their value in *only* ETH terms. After accounting for price changes, they effectively sold BTC for ETH.
+
+- `r round(sum(ethbtc$pnl == "Both PnL Profit")/nrow(ethbtc) * 100, 2)`% of positions net increased their value in *both* ETH and BTC terms. They were undoubtedly profitable (although technically the counterfactual of going *all in* on the winning asset is not assessed here).
+
+- `r round(sum(ethbtc$pnl %in% c("Both PnL Loss", "Breakeven"))/nrow(ethbtc) * 100, 2)`% of positions 
+either broke even (often quickly withdrawing the same position without accruing any fees) or were undoubtedly unprofitable. This worst case scenario would occur from withdrawing assets specifically 
+after a large price change without accruing fees to make up for the loss from price impact.
+ 
+```{r}
+
+key_barchart(ethbtc$pnl, title = "Position Resulting Profit & Loss Category")
+
+```
+
+## Strategy > HODL
+
+PnL is useful, but in general what most interests Uniswap v3 participants is 
+whether participating in the strategy beats the *opportunity cost* of not participating.
+
+If I start with 10 BTC and 50 ETH and end up with 15.25 BTC and 40.1 ETH after withdrawing from a strategy and collecting my fees- am I better off?
+
+PnL integrates price changes like traditional accounting. HODL Reference Value and Strategy 
+Reference Value use a single point in time price (the price as of Position Closure) to assess 
+whether results from a strategy exceeds opportunity cost.
+
+```{r}
+ethbtc <- ethbtc %>% mutate(
+  strat = case_when(
+    strat_btc_terms == hodl_btc_terms & strat_eth_terms == hodl_eth_terms ~ "Breakeven",
+    strat_btc_terms <= hodl_btc_terms & strat_eth_terms <= hodl_eth_terms ~ "Both Strategy Loss",
+    strat_btc_terms > hodl_btc_terms & strat_eth_terms <= hodl_eth_terms ~ "BTC Strat Gain Only",
+    strat_btc_terms <= hodl_btc_terms & strat_eth_terms > hodl_eth_terms ~ "ETH Strat Gain Only",
+    strat_btc_terms > hodl_btc_terms & strat_eth_terms > hodl_eth_terms ~ "Both Strategy Profit"
+  )
+)
+
+```
+
+Because PnL accounts for price changes, middling results are more common. When using a point in 
+time price like Strategy vs HODL, binary results should be more common. We see: 
+
+- `r round(sum(ethbtc$strat == "Both Strategy Profit")/nrow(ethbtc) * 100, 2)`% of positions were in total profit in both terms after accounting for fees relative to simply holding the deposited assets.
+- `r round(sum(ethbtc$strat == "Both Strategy Loss")/nrow(ethbtc) * 100, 2)`% of positions were in total loss, they would have been better off in both assets having held their original deposits.
+
+```{r}
+key_barchart(ethbtc$strat, xlab = "Result", "Count", title = "Distribution of ETHBTC Strategy vs HODL")
+```
+
+## Economic Profit Percent (Strategy - HODL) / HODL
+
+The distribution of how much profiteers profited is important for understanding how to 
+replicate these results. In each asset terms the Strategy Value - the HODL Value, divided by the 
+HODL value, times 100 to get to percentage, is considered the Economic Profit Percent (EPP).
+
+```{r}
+ethbtc <- ethbtc %>% mutate(
+  btc_epp =  100*(strat_btc_terms - hodl_btc_terms)/hodl_btc_terms,
+  eth_epp =  100*(strat_eth_terms - hodl_eth_terms)/hodl_eth_terms
+)
+
+# make breakevens 0 in case of divide by 0
+
+ethbtc[is.na(ethbtc)] <- 0
+
+```
+
+
+# Position Characteristics
+
+Start Block
+
+End Block
+
+Lifespan
+
+Tick Width
+
+Size
+
+Trend of BTC/ETH Price
+
+## Profitability by Position Characteristics 
+
+Economic Profit Percent by: 
+
+Lifespan 
+
+Tick Width
+
+Trend of BTC/ETH Price
+
+
+
+
+
+
+
+
+
