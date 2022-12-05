@@ -45,6 +45,19 @@ did the position increase its value in ETH terms after adjusting for ETH's price
 
 ```{r}
 lps <- readRDS("ethbtc_lp_actions.rds")
+
+# adding back unique_ids to get tick information 
+
+lps$unique_id <- lps$NF_TOKEN_ID
+
+custom_index <- which(is.na(lps$unique_id))
+
+lps[custom_index, "unique_id"] <- paste0(lps[custom_index, "NF_POSITION_MANAGER_ADDRESS"],
+                                                "--",
+                                                lps[custom_index, "TICK_LOWER"],
+                                                "--",
+                                                lps[custom_index, "TICK_UPPER"])
+
 swaps <- readRDS("ethbtc_swaps.rds")
 ethbtc <- readRDS("ethbtc_results.rds")
 ethbtc_accounts <- readRDS("post_ethbtc_accounting.rds")
@@ -172,7 +185,8 @@ key_barchart(ethbtc$strat, xlab = "Result", "Count", title = "Distribution of ET
 
 The distribution of how much profiteers profited is important for understanding how to 
 replicate these results. In each asset terms the Strategy Value - the HODL Value, divided by the 
-HODL value, times 100 to get to percentage, is considered the Economic Profit Percent (EPP).
+HODL value, times 100 to get to percentage, is considered the Economic Profit Percent (EPP) which is 
+measured in both BTC and ETH terms separately.
 
 ```{r}
 ethbtc <- ethbtc %>% mutate(
@@ -184,32 +198,337 @@ ethbtc <- ethbtc %>% mutate(
 
 ethbtc[is.na(ethbtc)] <- 0
 
+ethbtc_sig_change <- ethbtc %>% 
+  filter(btc_epp > 1 | btc_epp < -1) %>% 
+  filter(eth_epp > 1 | eth_epp < -1)
+
+```
+
+- `r sum(ethbtc$btc_epp > 1 | ethbtc$btc_epp < -1)` of the `rnrow(ethbtc)` (
+`r round(sum(ethbtc$btc_epp > 1 | ethbtc$btc_epp < -1)/nrow(ethbtc) * 100, 2)`)
+had their BTC denominated Strategy Value within -1% to 1% from their HODL value.
+- There is a `r cor(ethbtc$btc_epp, ethbtc$eth_epp)` correlation between Economic Profit in ETH terms and 
+BTC terms. This makes sense as generally a strategy is either net winning or net losing given a single point in time 
+price.
+
+Looking at positions with a significant change (larger than 1% difference between the Strategy Value and HODL value in either direction and either asset) shows a range of `r min(ethbtc_sig_change$eth_epp)`% to `r max(ethbtc_sig_change$eth_epp)`% in ETH Economic Profit with an average `r mean(ethbtc_sig_change$eth_epp)`% 
+change in value.
+
+```{r}
+key_histogram <- function(tbl, percent_col1, percent_col2,
+                          p1name, p2name, xlab = "Result", ylab = "Count",
+                          title){
+  plot_ly(alpha = 0.45, data = tbl, 
+          nbinsx = 100, 
+          x = tbl[[percent_col1]],
+          type = "histogram",
+          name = p1name) %>%
+  add_histogram(x = tbl[[percent_col2]], name = p2name) %>%   
+      layout(
+        barmode = "overlay",
+      title = list(text = title, y = 0.975),
+      xaxis = list(title = xlab),
+      yaxis = list(title = ylab)
+    )
+}
+
+key_histogram(tbl = ethbtc_sig_change,
+              percent_col1 = "btc_epp", 
+              percent_col2 = "eth_epp",
+              p1name = "in BTC", p2name = "in ETH",
+              xlab = "% Economic Profit against HODL",
+              title = "Distribution of Significant % EPP Change \n (-1,1) removed")
+  
+```
+
+# Position Characteristics by Profitability
+
+Moving forward to identify characteristics of positions with (1) Significant Difference 
+between Strategy and HODL values (1% or more in either direction) specifically in ETH 
+terms across a variety of measures.
+
+```{r}
+get_start <- function(unique_id){
+  min(ethbtc_accounts[[unique_id]]$BLOCK_NUMBER)
+}
+
+get_end <- function(unique_id){
+  max(ethbtc_accounts[[unique_id]]$BLOCK_NUMBER)
+}
+
+ethbtc <- ethbtc %>% 
+  group_by(unique_id) %>% 
+  mutate(
+    start_block = get_start(unique_id),
+    end_block = get_end(unique_id)
+  ) %>% 
+  mutate(
+    lifespan = end_block - start_block + 1
+  )
+
+ethbtc_sig_change <- ethbtc %>% 
+  filter(btc_epp > 1 | btc_epp < -1) %>% 
+  filter(eth_epp > 1 | eth_epp < -1)
+
+```
+
+## Start Block
+
+It takes time to accrue fees, with only `r sum(ethbtc_sig_change$eth_epp >= 10 & ethbtc_sig_change$start_block >= 13917000)` positions starting in 2022 closing with 10%+ in Economic Profit Percentage; and 
+ `r sum(ethbtc_sig_change$eth_epp >= 5 & ethbtc_sig_change$start_block >= 13917000)` getting 
+ at least 5%.
+
+```{r}
+key_scatter <- function(tbl, x, y, xlab, ylab, title){
+ 
+  plot_ly(tbl, x = tbl[[x]], y = tbl[[y]], type = "scatter", mode = "markers", name  = "Positions") %>% 
+    layout(
+      title = list(text = title, y = 0.975),
+      xaxis = list(title = xlab),
+      yaxis = list(title = ylab)
+    )
+    
+}
+
+key_scatter(ethbtc_sig_change, x = "start_block", y = "eth_epp",
+            xlab = "Position Opening Block",
+            ylab = "ETH % Gain over HODL",
+            title = "Only 2 positions w/ >10% Gains Opened in 2022") %>% 
+  add_lines(x = 13917000, y = c(-30, 30), name = "Jan 1, 2022")
+
+```
+
+## End Block
+
+Again, as expected more time to accrues fees is important. A deeper dive into Lifespans 
+will follow.
+
+But curiously many of the historically closed positions were closed very recently in the data.
+
+```{r}
+plot(ecdf(ethbtc_sig_change$end_block), 
+     ylab = "Cumulative % of Position Closures",
+     xlab = "Position Closure Block #",
+     main = "Position Closures are biased to recently")
+```
+
+```{r}
+
+key_scatter(ethbtc_sig_change, x = "end_block", y = "eth_epp",
+            xlab = "Position Closing Block",
+            ylab = "ETH % Gain over HODL",
+            title = "Profitability by Position Closing Block") %>% 
+  add_lines(x = 13917000, y = c(-30, 30), name = "Jan 1, 2022")
+
+```
+
+## Lifespan
+
+### Just In Time Liquidity 
+
+```{r}
+jit <- ethbtc[ethbtc$lifespan == 1, ]
+
+```
+
+For clarity on the phenomenon of Just In Time (JIT) Liquidity: of all positions 
+`r sum(ethbtc$lifespan == 1)` lasted only a single block. Only `r sum(ethbtc_sig_change$lifespan == 1)` 
+met the condition for significant change (Strategy was at least 1% different from HODL).
+
+Of these JIT positions, `r sum(jit$strat == "Both Strategy Profit")` (nearly all) beat HODL. While their 
+gains may be high on an annualized basis, they represent only `r round(100*nrow(jit)/nrow(ethbtc), 2)`% of 
+closed positions. 
+
+Overall, patience has been the most visually apparent winning strategy for beating HODL.
+
+```{r}
+key_scatter(ethbtc_sig_change, x = "lifespan", y = "eth_epp",
+            xlab = "Lifespan in # Blocks",
+            ylab = "ETH % Gain over HODL",
+            title = "More time to accrue fees is critical") 
+```
+
+## Tick Width
+
+Different pools (more specifically different fee tiers) have a different amount of 
+minimum tick spacings that can be used when making a position. For ETH-BTC it is 60, thus 
+all positions are a multiple of 60 ticks apart.
+
+Dividing the tick width by this 60 gets us the tick spacing.
+```{r}
+ticks <- unique(lps[ , c("unique_id","TICK_LOWER", "TICK_UPPER")])
+ticks <- ticks %>% mutate(tick_spacing = (TICK_UPPER - TICK_LOWER)/60)
+
+ethbtc <- merge(ethbtc, ticks, all.x = TRUE, by = "unique_id")
+
+ethbtc_sig_change <- ethbtc %>% 
+  filter(btc_epp > 1 | btc_epp < -1) %>% 
+  filter(eth_epp > 1 | eth_epp < -1)
+
+```
+
+Among all positions, 1000 tick spaces covers `r round(ecdf(ethbtc$tick_spacing)(1000) * 100, 2)`% of positions.
+
+Zooming into this section, narrow ranges of < 200 tick spaces perform chaotically. 
+
+```{r}
+key_scatter(tbl = ethbtc, x = "tick_spacing", y = "eth_epp", 
+            xlab = "Tick Spaces",
+            ylab = "ETH % Gain over HODL",
+            title = "Few Losers among 400+ Tick Spaces Wide") %>% 
+  layout(
+    xaxis = list(range = c(0, 1000))
+  )
+
+```
+
+Comparing performance of positions under 200 tick spaces versus 200+ shows this stark contrast.   
+
+```{r}
+reactable(
+  ethbtc %>% group_by(wider_than_200 = tick_spacing >= 200) %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+```
+
+Filtering out the positions non-significant changes from HODL (-1% to 1% gain) increases the distribution 
+bias of gains toward wider positions. It will be interesting to dive deeper on this, as all else equal, 
+narrower positions concentrate their liquidity and increase their fee revenue (at the risk of selling all 
+their winning tokens sooner).
+
+```{r}
+reactable(
+  ethbtc_sig_change %>% group_by(wider_than_200 = tick_spacing >= 200) %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+```
+
+## Position Size
+
+Looking at Economic Profit as it relates to the size of the position using the HODL ETH 
+Value, `r 100*sum(ethbtc_sig_change$hodl_eth_terms < 100)/nrow(ethbtc_sig_change)`% of 
+positions were < 100 ETH in size.
+
+Splitting by large (100+ ETH) doesn't show much difference in typical gain (both groups lose on average). 
+
+```{r}
+reactable(
+  ethbtc_sig_change %>% group_by(large = hodl_eth_terms >= 100) %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+```
+
+```{r}
+
+key_scatter(tbl = ethbtc_sig_change, x = "hodl_eth_terms", y = "eth_epp", 
+            xlab = "Position Size in ETH if HODL'd", 
+            ylab = "ETH % Gain over HODL",
+            title = "") %>% 
+  layout(
+    xaxis = list(range = c(0, 500))
+  )
+
+```
+
+## Vault Managed Positions 
+
+Do we see Vaults, like Gamma.xyz outperform on profitability over individually managed positions?
+A vault is identifiable by it's lack of NF Token ID, making its unique_id a concatenation of 
+NF_POSITION_MANAGER_ADDRESS--TICK_LOWER--TICK_UPPER.
+
+```{r}
+
+ethbtc$vault <- ifelse(grepl("^0x", ethbtc$unique_id), "Vault", "Individual")
+
+ethbtc_sig_change <- ethbtc %>% 
+  filter(btc_epp > 1 | btc_epp < -1) %>% 
+  filter(eth_epp > 1 | eth_epp < -1)
 ```
 
 
-# Position Characteristics
+Curiously, although there are `r sum(ethbtc$vault == "Vault")` Vaults overall, 
+only `r sum(ethbtc_sig_change$vault == "Vault")` had significant differences from HODLing the assets 
+(at least 1% difference in either direction).
 
-Start Block
+```{r}
+reactable(
+  ethbtc %>% group_by(vault == "Vault") %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
 
-End Block
+```
 
-Lifespan
+Of the vaults that did result in a difference from HODLing, they lost similar amounts 
+as individual Uniswap v3 NFT Managed Positions (i.e., Individuals) on average without 
+any of the rare excess wins. `r sum(ethbtc_sig_change$vault == "Vault" & ethbtc_sig_change$eth_epp >= 5)` of 
+the positions managed by vaults matched or exceeded +5% of HODL compared to 
+`r sum(ethbtc_sig_change$vault == "Individual" & ethbtc_sig_change$eth_epp >= 5)` individuals.
 
-Tick Width
+```{r}
+reactable(
+  ethbtc_sig_change %>% group_by(vault == "Vault") %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
 
-Size
+```
 
-Trend of BTC/ETH Price
+```{r}
+plot_ly(ethbtc_sig_change, x = ~eth_epp, color = ~vault, type = "histogram", nbinsx = 100) %>% 
+  layout(
+    xaxis = list(range = c(-10, 10), title = "ETH % Gain over HODL"),
+    title = list(text = "Vaults generally underperform HODL \n (-1%,1%) removed", y = 0.975)
+  )
 
-## Profitability by Position Characteristics 
+```
 
-Economic Profit Percent by: 
+# Is there a winning Strategy?
 
-Lifespan 
+What would most interesting, would be to find a pattern among short lifespan positions that were profitable, since annualized the same profit percentage is better when it is accumulated in shorter time spans. 
 
-Tick Width
+```{r}
 
-Trend of BTC/ETH Price
+key_scatter(ethbtc_sig_change, x = "lifespan", y = "eth_epp",
+            xlab = "Lifespan in # Blocks",
+            ylab = "ETH % Gain over HODL",
+            title = "More time to accrue fees is critical") %>% 
+  layout(
+    xaxis = list(range = c(0, 100000)),
+    yaxis = list(range = c(-10, 10))
+  )
+
+```
+
+# Elite Burst Positions
+
+
 
 
 
