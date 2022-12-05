@@ -26,7 +26,21 @@ fee_correction <- function(id_fees, id_lp_actions){
         id_fees[fee_tx_in_lp, amount_cols] <- {
           id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
         }
-      }
+      } else { 
+        for(i in id_fees$TX_HASH[fee_tx_in_lp]){
+          if(
+            mean(
+              id_fees[id_fees$TX_HASH == i, amount_cols] >= 
+              id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+            ) == 1
+          ){
+            id_fees[id_fees$TX_HASH == i, amount_cols] <- {
+              id_fees[id_fees$TX_HASH == i, amount_cols]  - 
+                id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
+            }
+          } else next()
+        }
+        }
     } else { 
       # else go 1 by one to overlapping tx and check again
       
@@ -81,6 +95,86 @@ accounting <- function(id_lp_actions, id_fees, price_col){
   accounting_tbl <- rbind(cost_basis, withdrawals, fees)
   
   return(accounting_tbl)
+  
+}
+
+pnl <- function(id_accounting, t0col, t1col, price_col, price_base = "t1/t0"){
+  
+  # allow user to choose the base that is easier to read
+  # e.g., usdc/eth may be easier to read than eth/usdc; which means t0/t1 instead of t1/t0
+  # while ETH/BTC may be easier than BTC/ETH; which is t1/t0 the default!
+  
+  if(price_base == 't1/t0'){
+    pnl = data.frame(
+      pnl_t0_terms = sum(id_accounting$token0, (id_accounting$token1/id_accounting[[price_col]])),
+      pnl_t1_terms = sum(id_accounting$token1, (id_accounting$token0*id_accounting[[price_col]]))
+    )
+  } else if(price_base == 't0/t1'){
+    pnl = data.frame(
+      pnl_t0_terms = sum(id_accounting$token0, (id_accounting$token1*id_accounting[[price_col]])),
+      pnl_t1_terms = sum(id_accounting$token1, (id_accounting$token0/id_accounting[[price_col]]))
+    )
+  } else {
+    stop("price_base must be 't1/t0' (default) or 't0/t1'")
+  }
+  
+  
+  colnames(pnl) <- c(t0col, t1col)
+  
+  return(pnl)
+}
+
+hodl_reference <- function(id_accounting, t0col, t1col, price_col, price_base = "t1/t0"){
+  
+  price_at_close_block = id_accounting[[price_col]][id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
+  
+  if(price_base == 't1/t0'){
+    hodl <- id_accounting %>% 
+      filter(accounting == 'cost_basis') %>% 
+      summarise(
+        hodl_t0_terms = abs(sum(token0) + sum(token1 / price_at_close_block)),
+        hodl_t1_terms = abs(sum(token1) + sum(token0 * price_at_close_block)),
+      )
+  } else if(price_base == 't0/t1'){
+    hodl <- id_accounting %>% 
+      filter(accounting == 'cost_basis') %>% 
+      summarise(
+        hodl_t0_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
+        hodl_t1_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
+      )
+  } else {
+    stop("price_base must be 't1/t0' (default) or 't0/t1'")
+  }
+  
+  colnames(hodl) <- c(t0col, t1col)
+  
+  return(hodl)
+}
+
+strategy_reference <- function(id_accounting, t0col, t1col, price_col, price_base = "t1/t0"){
+  
+  price_at_close_block = id_accounting[[price_col]][id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
+  
+  if(price_base == 't1/t0'){
+    strat <- id_accounting %>% 
+      filter(accounting != 'cost_basis') %>% 
+      summarise(
+        strategy_t0_terms = abs(sum(token0) + sum(token1 / price_at_close_block)),
+        strategy_t1_terms = abs(sum(token1) + sum(token0 * price_at_close_block)),
+      )
+  } else if(price_base == 't0/t1'){
+    strat <- id_accounting %>% 
+      filter(accounting != 'cost_basis') %>% 
+      summarise(
+        strategy_t0_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
+        strategy_t1_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
+      )
+  } else {
+    stop("price_base must be 't1/t0' (default) or 't0/t1'")
+  }
+  
+  colnames(strat) <- c(t0col, t1col)
+  return(strat)
   
 }
 
