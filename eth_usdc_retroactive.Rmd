@@ -737,54 +737,7 @@ Adjusting for this would make the fee table look like this instead:
 # if ALL matching transactions show fees collected >= withdrawal amount for ALL tokens
 # remove withdrawal from collected to fix double counting. 
 
-fee_correction <- function(id_fees, id_lp_actions){
-
-  # fee-collection problem only occurs in decrease_liquidity
-  # sometimes in the same transaction the same exact liquidity is added and immediately removed
-  # occurs in poorly written NF_POSITION_MANAGERS.
-  
- id_lp_actions <- id_lp_actions %>% filter(ACTION == "DECREASE_LIQUIDITY")
-  
-  fee_tx_in_lp = (id_fees$TX_HASH %in% id_lp_actions$TX_HASH)
-  lp_tx_in_fee = (id_lp_actions$TX_HASH %in% id_fees$TX_HASH)
-  amount_cols = c("AMOUNT0_ADJUSTED", "AMOUNT1_ADJUSTED")
-  
-  # if there are no tx hashes in both tables move on 
-  if(sum(fee_tx_in_lp) == 0){
-    return(id_fees)
-    
-  } else { 
-    # if it perfectly lines up that ALL tx hashes in 
-    # both tables have fees collected double counting withdrawals;
-    # fix by subtracting the double counting
-    # note: it is assumed transactions are ordered by block number for alignment to work
-    if(sum(fee_tx_in_lp) == sum(lp_tx_in_fee)){
-      if(mean(id_fees[fee_tx_in_lp, amount_cols] >= id_lp_actions[lp_tx_in_fee, amount_cols]) == 1){
-        id_fees[fee_tx_in_lp, amount_cols] <- {
-          id_fees[fee_tx_in_lp, amount_cols] - id_lp_actions[lp_tx_in_fee, amount_cols] 
-        }
-      }
-    } else { 
-      # else go 1 by one to overlapping tx and check again
-      
-      for(i in id_fees$TX_HASH[fee_tx_in_lp]){
-        if(
-          mean(
-            id_fees[id_fees$TX_HASH == i, amount_cols] >= 
-            id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
-          ) == 1
-        ){
-          id_fees[id_fees$TX_HASH == i, amount_cols] <- {
-            id_fees[id_fees$TX_HASH == i, amount_cols]  - 
-              id_lp_actions[id_lp_actions$TX_HASH == i, amount_cols]
-          }
-        } else next()
-      }
-    }
-    
-    return(id_fees)
-  }
-}
+# fee correction in key_functions.R
 
 f96877 <- fee_correction(f96877, p96877)  
 reactable(f96877)
@@ -799,42 +752,9 @@ the cost basis; 3 withdrawals; and a single total fees row priced at the positio
 
 ```{r}
 
-accounting <- function(id_lp_actions, id_fees){
+# accounting() from key_functions.R
 
-    # cost basis negative for subtraction 
-  cost_basis <- id_lp_actions %>% filter(ACTION == "INCREASE_LIQUIDITY") %>% 
-    mutate(
-      token0 = -1*AMOUNT0_ADJUSTED,
-      token1 = -1*AMOUNT1_ADJUSTED,
-      accounting = "cost_basis"
-    ) %>% 
-    select(BLOCK_NUMBER, accounting, token0, token1, eth_price)
-  
-  withdrawals <- id_lp_actions %>% filter(ACTION == "DECREASE_LIQUIDITY") %>% 
-        mutate(
-      token0 = AMOUNT0_ADJUSTED,
-      token1 = AMOUNT1_ADJUSTED,
-      accounting = "withdrawal"
-    ) %>% 
-    select(BLOCK_NUMBER, accounting, token0, token1, eth_price)
-  
-  fees <- data.frame(
-    BLOCK_NUMBER = max(withdrawals$BLOCK_NUMBER),
-    accounting = "fee revenue",
-    token0 = sum(id_fees$AMOUNT0_ADJUSTED),
-    token1 = sum(id_fees$AMOUNT1_ADJUSTED)
-  )
-  
-  # price fees at position closure, i.e., last withdrawal
-  fees$eth_price <- tail(withdrawals$eth_price, n = 1)
-  
-  accounting_tbl <- rbind(cost_basis, withdrawals, fees)
-  
-  return(accounting_tbl)
-  
-}
-
-a96877 <- accounting(id_lp_actions = p96877, id_fees = f96877)
+a96877 <- accounting(id_lp_actions = p96877, id_fees = f96877, price_col = "eth_price")
 
 reactable(
   a96877
@@ -856,20 +776,11 @@ In ETH terms, we divide all token0 (USDC) by eth_price to get ETH terms, then su
 
 ```{r}
 
-pnl <- function(id_accounting){
- 
-pnl = data.frame(
-  pnl_usd_terms = sum(id_accounting$token0, (id_accounting$token1*id_accounting$eth_price)),
-  pnl_eth_terms = sum(id_accounting$token1, (id_accounting$token0/id_accounting$eth_price))
-)
+# pnl from key_functions.R
 
-return(pnl)
-}
-
-pnl_96877 <- data.frame(
-  usd_terms = sum(a96877$token0, (a96877$token1*a96877$eth_price)),
-  eth_terms = sum(a96877$token1, (a96877$token0/a96877$eth_price))
-)
+pnl_96877 <- pnl(id_accounting = a96877, 
+                 t0col = "usd_terms", t1col = "eth_terms",
+                 price_col = "eth_price", price_base = "t0/t1")
 ```
 
 This results in a gain of `r pnl_96877$usd_terms` in USD terms. In ETH terms it is a loss 
@@ -900,20 +811,14 @@ at the position's closing withdrawal to get the counterfactual: what would the p
 
 ```{r}
 
-hodl_reference <- function(id_accounting){
-  
-price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
-  
-id_accounting %>% 
-  filter(accounting == 'cost_basis') %>% 
-  summarise(
-    hodl_usd_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
-    hodl_eth_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
-)
-}
+#hodl_reference() available in key_functions.R
+
+hodl96877 <- hodl_reference(id_accounting = a96877, 
+                 t0col = "usd_terms", t1col = "eth_terms",
+                 price_col = "eth_price", price_base = "t0/t1")
 
 reactable(
-hodl_reference(a96877)  
+hodl96877
 )
 
 ```
@@ -927,20 +832,14 @@ takes into account changes in ETH's price.
 
 ```{r}
 
-strategy_reference <- function(id_accounting){
-  
-  price_at_close_block = id_accounting$eth_price[id_accounting$BLOCK_NUMBER == max(id_accounting$BLOCK_NUMBER)][1] 
-  
-  id_accounting %>% 
-  filter(accounting != 'cost_basis') %>% 
-  summarise(
-    strategy_usd_terms = abs(sum(token0) + sum(token1 * price_at_close_block)),
-    strategy_eth_terms = abs(sum(token1) + sum(token0 / price_at_close_block)),
-)
-}
+# strategy_reference() available in key_functions.R 
+
+strat96877 <- strategy_reference(id_accounting = a96877, 
+                   t0col = "usd_terms", t1col = "eth_terms",
+                   price_col = "eth_price", price_base = "t0/t1")
 
 reactable(
-  strategy_reference(a96877)
+strat96877
 )
 
 ```
@@ -957,7 +856,7 @@ Here is the strategy reference minus hodl reference to show this *realized* dive
 
 ```{r}
 reactable(
-strategy_reference(a96877) - hodl_reference(a96877) 
+strat96877 - hodl96877 
 )
 ```
 
@@ -1064,7 +963,8 @@ id_accounting <- lapply(1:length(id_fees_fixed),
                         FUN = function(i){
                           tryCatch(
                           accounting(id_lp_actions = id_lp_list[[i]],
-                                     id_fees = id_fees_fixed[[i]]), error = function(e){
+                                     id_fees = id_fees_fixed[[i]], 
+                                     price_col = "eth_price"), error = function(e){
                               print(paste0("Error found in position: ", i))
                             })  
                         })
@@ -1088,13 +988,24 @@ up separately.
 # for brevity read id_accounting to continue here
 id_accounting <- readRDS("post_accounting.rds")
 
-id_pnl <- lapply(id_accounting, pnl)
+id_pnl <- lapply(id_accounting, function(i){
+  pnl(id_accounting = i ,t0col = "pnl_usdc_terms",t1col = "pnl_eth_terms",
+      price_col = "eth_price",price_base = "t0/t1")
+  })
+
 pnl_results <- bind_rows(id_pnl, .id = "unique_id")
 
-id_hodl <- lapply(id_accounting, hodl_reference)
+id_hodl <- lapply(id_accounting, function(i){
+  hodl_reference(id_accounting = i ,t0col = "hodl_usdc_terms",t1col = "hodl_eth_terms",
+      price_col = "eth_price",price_base = "t0/t1")
+})
 hodl_results <- bind_rows(id_hodl, .id = "unique_id")
 
-id_strat <- lapply(id_accounting, strategy_reference)
+id_strat <- lapply(id_accounting, function(i){
+  strategy_reference(id_accounting = i ,t0col = "strat_usdc_terms",t1col = "strat_eth_terms",
+      price_col = "eth_price",price_base = "t0/t1")
+})
+
 strategy_results <- bind_rows(id_strat, .id = "unique_id")
 
 ethusdc_results <- merge(pnl_results, hodl_results, by = "unique_id")
