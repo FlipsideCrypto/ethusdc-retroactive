@@ -1,0 +1,252 @@
+---
+title: "eth_usdc_analysis"
+author: "Charliemarketplace"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r, warning = FALSE, message = FALSE}
+library(reactable)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+source("key_functions.R")
+```
+
+# Data 
+
+Using the accounting results detailed in `eth_usdc_retroactive.Rmd` and merging them 
+with metadata from unique Uniswap v3 positions available in `lp_actions.rds` (as detailed 
+in `collect_data.R`) to understand any patterns in Uniswap v3 positions profitability.
+
+- unique_id: The Uniswap v3 unique position, typically an NF_TOKEN_ID but for Vaults that 
+don't use NF_TOKEN_ID, the concatenation of NF_POSITION_MANAGER--TICK_LOWER--TICK_UPPER.
+
+- pnl_usd_terms: The profit and loss of a position over its lifecycle as measured in USD, i.e., 
+did the position increase its value in USD terms after adjusting for USD's price changes (against ETH) and the AMM strategy, including fees accrued.
+
+- pnl_eth_terms: The profit and loss of a position over its lifecycle as measured in ETH, i.e., 
+did the position increase its value in ETH terms after adjusting for ETH's price changes (in USD) and the AMM strategy, including fees accrued.
+
+- hodl_usd_terms: The value of the original assets in USD terms at time of position closure.
+
+- hodl_eth_terms: The value of the original assets in ETH terms at time of position closure.
+
+- strat_usd_terms: The value of the assets removed from the position in USD terms at time of position closure including fees accrued.
+
+- strat_eth_terms: The value of the assets removed from the position in ETH terms at time of position closure including fees accrued.
+
+```{r}
+
+lps <- readRDS("lp_actions.rds")
+
+# adding back unique_ids to get tick information 
+
+lps$unique_id <- lps$NF_TOKEN_ID
+
+custom_index <- which(is.na(lps$unique_id))
+
+lps[custom_index, "unique_id"] <- paste0(lps[custom_index, "NF_POSITION_MANAGER_ADDRESS"],
+                                                "--",
+                                                lps[custom_index, "TICK_LOWER"],
+                                                "--",
+                                                lps[custom_index, "TICK_UPPER"])
+
+ethusdc <- readRDS("ethusdc_results.rds")
+ethusdc_accounts <- readRDS("post_accounting.rds")
+
+ethusdc[ , 2:7] <- ethusdc[ , 2:7] %>% round(., 4)
+
+reactable(ethusdc[200, ])
+
+
+```
+
+
+# Rates of Profitability
+
+Different positions will have different profit & loss (PnL), different original assets value at position closure (HODL Reference Value, i.e., Opportunity Cost), and different withdrawn assets value at position closure including fees (Strategy Reference Value, i.e., Realized Value).
+
+These assets are volatile, so pure PnL may not be the desired framework for assessing whether 
+participating in Uniswap v3 was a *good idea*. This is where Economic Profit Percent comes in. Economic Profit is the return on investment above the opportunity cost (here, doing nothing and not having participated in Uniswap v3).
+
+## PnL 
+
+Because of how AMMs work, over the lifespan of a position the relative value of ETH against USDC will determine the final makeup of the assets withdrawn. If ETH goes up in value against USDC, 
+positions will sell their ETH and accumulate USDC. Profit & Loss integrates price changes to identify the change in value over time.
+
+
+### Example Table of Labels 
+
+To better detail the labels, here is a sample table explaining 
+how Breakeven, Profit, and Loss are applied in nuanced situations.
+
+```{r}
+reactable(
+  data.frame(
+    pnl_usdc_terms = c(-1, -1, -1, 0, 0,  0, 1, 0,  1),
+    pnl_eth_terms = c(-1,  0,  1, -1, 0, 1, 1, 1, -1)
+  ) %>% mutate(
+    pnl = case_when(
+      pnl_usdc_terms == 0 & pnl_eth_terms == 0 ~ "Breakeven",
+      pnl_usdc_terms <= 0 & pnl_eth_terms <= 0 ~ "Both PnL Loss",
+      pnl_usdc_terms > 0 & pnl_eth_terms <= 0 ~ "USD PnL Only",
+      pnl_usdc_terms <= 0 & pnl_eth_terms > 0 ~ "ETH PnL Only",
+      pnl_usdc_terms > 0 & pnl_eth_terms > 0 ~ "Both PnL Profit"
+    )
+  )
+)
+```
+
+
+### Actual Results
+
+```{r}
+ethusdc <- ethusdc %>% mutate(
+  pnl = case_when(
+    pnl_usdc_terms == 0 & pnl_eth_terms == 0 ~ "Breakeven",
+    pnl_usdc_terms <= 0 & pnl_eth_terms <= 0 ~ "Both PnL Loss",
+    pnl_usdc_terms > 0 & pnl_eth_terms <= 0 ~ "USD PnL Only",
+    pnl_usdc_terms <= 0 & pnl_eth_terms > 0 ~ "ETH PnL Only",
+    pnl_usdc_terms > 0 & pnl_eth_terms > 0 ~ "Both PnL Profit"
+  )
+)
+
+key_barchart <- function(result, xlab = "Result", ylab = "Count", title){
+  r <- as.data.frame(table(result))
+  r$percent <- round(r$Freq/sum(r$Freq) * 100, digits = 2)
+  
+  plot_ly(r, x = ~result, y = ~Freq, type = "bar", text = ~paste0(percent,"%")) %>% 
+    layout(
+      title = list(text = title, y = 0.975),
+      xaxis = list(title = xlab),
+      yaxis = list(title = ylab)
+    )
+}
+
+
+```
+
+
+In general, positions gained in at least 1 form of PnL: 
+
+- `r round(sum(ethusdc$pnl == "USD PnL Only")/nrow(ethusdc) * 100, 2)`% of positions net increased their value in *only* USD terms. After accounting for price changes, they effectively sold ETH for USD.
+
+- `r round(sum(ethusdc$pnl == "ETH PnL Only")/nrow(ethusdc) * 100, 2)`% of positions net increased their value in *only* ETH terms. After accounting for price changes, they effectively sold USD for ETH.
+
+- `r round(sum(ethusdc$pnl == "Both PnL Profit")/nrow(ethusdc) * 100, 2)`% of positions net increased their value in *both* ETH and USD terms. They were undoubtedly profitable (although technically the counterfactual of going *all in* on the winning asset is not assessed here).
+
+- `r round(sum(ethusdc$pnl %in% c("Both PnL Loss", "Breakeven"))/nrow(ethusdc) * 100, 2)`% of positions 
+either broke even (often quickly withdrawing the same position without accruing any fees) or were undoubtedly unprofitable. This worst case scenario would occur from withdrawing assets specifically 
+after a large price change without accruing fees to make up for the loss from price impact.
+
+```{r}
+
+key_barchart(ethusdc$pnl, title = "Position Resulting Profit & Loss Category")
+
+```
+
+
+## Strategy > HODL
+
+PnL is useful, but in general what most interests Uniswap v3 participants is 
+whether participating in the strategy beats the *opportunity cost* of not participating.
+
+If I start with 100,000 USDC and 50 ETH and end up with 150,250 BTC and 40.1 ETH after withdrawing from a strategy and collecting my fees- am I better off?
+
+PnL integrates price changes like traditional accounting. HODL Reference Value and Strategy 
+Reference Value use a single point in time price (the price as of Position Closure) to assess 
+whether results from a strategy exceeds opportunity cost.
+
+
+```{r}
+ethusdc <- ethusdc %>% mutate(
+  strat = case_when(
+    strat_usdc_terms == hodl_usdc_terms & strat_eth_terms == hodl_eth_terms ~ "Breakeven",
+    strat_usdc_terms <= hodl_usdc_terms & strat_eth_terms <= hodl_eth_terms ~ "Both Strategy Loss",
+    strat_usdc_terms > hodl_usdc_terms & strat_eth_terms <= hodl_eth_terms ~ "BTC Strat Gain Only",
+    strat_usdc_terms <= hodl_usdc_terms & strat_eth_terms > hodl_eth_terms ~ "ETH Strat Gain Only",
+    strat_usdc_terms > hodl_usdc_terms & strat_eth_terms > hodl_eth_terms ~ "Both Strategy Profit"
+  )
+)
+
+```
+
+
+Because PnL accounts for price changes, middling results are more common. When using a point in 
+time price like Strategy vs HODL, binary results should be more common. We see: 
+
+- `r round(sum(ethusdc$strat == "Both Strategy Profit")/nrow(ethusdc) * 100, 2)`% of positions were in total profit in both terms after accounting for fees relative to simply holding the deposited assets.
+- `r round(sum(ethusdc$strat == "Both Strategy Loss")/nrow(ethusdc) * 100, 2)`% of positions were in total loss, they would have been better off in both assets having held their original deposits.
+
+```{r}
+key_barchart(ethusdc$strat, xlab = "Result", "Count", title = "Distribution of ETHUSDC Strategy vs HODL")
+```
+
+## Economic Profit Percent (Strategy - HODL) / HODL
+
+The distribution of how much profiteers profited is important for understanding how to 
+replicate these results. In each asset terms the Strategy Value - the HODL Value, divided by the 
+HODL value, times 100 to get to percentage, is considered the Economic Profit Percent (EPP) which is 
+measured in both BTC and ETH terms separately.
+
+```{r}
+ethusdc <- ethusdc %>% mutate(
+  usdc_epp =  100*(strat_usdc_terms - hodl_usdc_terms)/hodl_usdc_terms,
+  eth_epp =  100*(strat_eth_terms - hodl_eth_terms)/hodl_eth_terms
+)
+
+# make breakevens 0 in case of divide by 0
+
+ethusdc[is.na(ethusdc)] <- 0
+
+ethusdc_sig_change <- ethusdc %>% 
+  filter(usdc_epp > 1 | usdc_epp < -1) %>% 
+  filter(eth_epp > 1 | eth_epp < -1)
+
+```
+
+
+- `r sum(ethusdc$usdc_epp > 1 | ethusdc$usdc_epp < -1)` of the `r nrow(ethusdc)` (
+`r round(sum(ethusdc$usdc_epp > 1 | ethusdc$usdc_epp < -1)/nrow(ethusdc) * 100, 2)`%)
+had their USDC denominated Strategy Value within -1% to 1% from their HODL value.
+- There is a `r cor(ethusdc$usdc_epp, ethusdc$eth_epp)` correlation between Economic Profit in ETH terms and USD terms. This makes sense as generally a strategy is either net winning or net losing given a single point in time price.
+
+Looking at positions with a significant change (larger than 1% difference between the Strategy Value and HODL value in either direction and either asset) shows a range of `r round(min(ethusdc_sig_change$eth_epp), 2)`% to `r round(max(ethusdc_sig_change$eth_epp),2)`% in ETH Economic Profit with an average `r round(mean(ethusdc_sig_change$eth_epp),2)`% 
+change in value.
+
+
+```{r}
+key_histogram <- function(tbl, percent_col1, percent_col2,
+                          p1name, p2name, xlab = "Result", ylab = "Count",
+                          title){
+  plot_ly(alpha = 0.45, data = tbl, 
+          nbinsx = 100, 
+          x = tbl[[percent_col1]],
+          type = "histogram",
+          name = p1name) %>%
+  add_histogram(x = tbl[[percent_col2]], name = p2name) %>%   
+      layout(
+        barmode = "overlay",
+      title = list(text = title, y = 0.975),
+      xaxis = list(title = xlab),
+      yaxis = list(title = ylab)
+    )
+}
+
+key_histogram(tbl = ethusdc_sig_change,
+              percent_col1 = "usdc_epp", 
+              percent_col2 = "eth_epp",
+              p1name = "in USD", p2name = "in ETH",
+              xlab = "% Economic Profit against HODL",
+              title = "Distribution of Significant % EPP Change \n (-1,1) removed")
+  
+```
+

@@ -39,9 +39,9 @@ did the position increase its value in ETH terms after adjusting for ETH's price
 
 - hodl_eth_terms: The value of the original assets in ETH terms at time of position closure.
 
-- strat_btc_terms: The value of the assets removed from the position in BTC terms at time of position closure including fees acrrued.
+- strat_btc_terms: The value of the assets removed from the position in BTC terms at time of position closure including fees accrued.
 
-- strat_eth_terms: The value of the assets removed from the position in ETH terms at time of position closure including fees acrrued.
+- strat_eth_terms: The value of the assets removed from the position in ETH terms at time of position closure including fees accrued.
 
 ```{r}
 lps <- readRDS("ethbtc_lp_actions.rds")
@@ -58,7 +58,6 @@ lps[custom_index, "unique_id"] <- paste0(lps[custom_index, "NF_POSITION_MANAGER_
                                                 "--",
                                                 lps[custom_index, "TICK_UPPER"])
 
-swaps <- readRDS("ethbtc_swaps.rds")
 ethbtc <- readRDS("ethbtc_results.rds")
 ethbtc_accounts <- readRDS("post_ethbtc_accounting.rds")
 

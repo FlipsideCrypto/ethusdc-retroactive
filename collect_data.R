@@ -89,6 +89,7 @@ eth_price[[i]]  <- get_eth_price(min_block = blocks[i],
   
 }
 
+
 all_eth_prices <- do.call(rbind, eth_price)
 all_eth_prices <- all_eth_prices[order(all_eth_prices$BLOCK_NUMBER),]
 
