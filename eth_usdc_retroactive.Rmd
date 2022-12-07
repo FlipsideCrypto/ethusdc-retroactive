@@ -946,8 +946,61 @@ id_fees_fixed <- lapply(1:length(id_fees_list),
                           fee_correction(id_fees_list[[i]], id_lp_list[[i]])
                         })
 
-# cleanup 
-rm(closed_lp_actions, closed_fees, id_fees_list)
+names(id_fees_fixed) <- names(id_fees_list)
+
+# the following ID numbers had to be manually assessed because they removed liquidity
+# in one transaction, but didn't withdraw that liquidity until a different transaction 
+# where they withdrew it w/ fees; 
+# the correction for subtraction cannot be safely done outside of the same tx hash
+# so a few outliers in gains over HODL had to be manually assessed
+
+ 
+simple_id_fixes = c('257807', '312929', '65786', '65812', '307159',
+               '313558','308037', '308609', '309526','309951',
+               '310633','56134','309447','309474','308843',
+               '308019','299771','299775','307179',
+               '308788', '309418','53369', '74271', '65807',
+               '305503', '55835', '56064', '317893'
+               )
+
+for(i in simple_id_fixes){
+  id_fees_fixed[[i]][, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- 
+    id_fees_fixed[[i]][ , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+  id_lp_list[[i]] %>% filter(ACTION == "DECREASE_LIQUIDITY") %>% select(AMOUNT0_ADJUSTED, AMOUNT1_ADJUSTED)
+}
+
+
+complex_id_fixes = c('154096', '299787', '155945','56988', '194524')
+
+# manually checked transactions to identify row match to adjust 
+
+id_fees_fixed[["154096"]][1 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- {
+  id_fees_fixed[["154096"]][1 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+    id_lp_list[["154096"]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
+}
+
+id_fees_fixed[["299787"]][2 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- {
+  id_fees_fixed[["299787"]][2 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+    id_lp_list[["299787"]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
+}
+
+id_fees_fixed[["155945"]][1 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- {
+  id_fees_fixed[["155945"]][1 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+    id_lp_list[["155945"]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
+}
+
+# extra tricky as there is a remove w/o withdrawal; then another remove + then 1 big withdraw
+id_fees_fixed[["56988"]][1 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- {
+  id_fees_fixed[["56988"]][1 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+    id_lp_list[["56988"]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
+}
+
+  
+id_fees_fixed[["194524"]][2, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] <- {
+  id_fees_fixed[["194524"]][2 , c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")] - 
+    id_lp_list[["194524"]][3, c("AMOUNT0_ADJUSTED","AMOUNT1_ADJUSTED")]
+}
+
 
 
 ```
