@@ -198,8 +198,8 @@ ethbtc <- ethbtc %>% mutate(
 ethbtc[is.na(ethbtc)] <- 0
 
 ethbtc_sig_change <- ethbtc %>% 
-  filter(btc_epp > 1 | btc_epp < -1) %>% 
-  filter(eth_epp > 1 | eth_epp < -1)
+   filter(btc_epp > 1 | btc_epp < -1 | eth_epp > 1 | eth_epp < -1)
+
 
 ```
 
@@ -266,8 +266,7 @@ ethbtc <- ethbtc %>%
   )
 
 ethbtc_sig_change <- ethbtc %>% 
-  filter(btc_epp > 1 | btc_epp < -1) %>% 
-  filter(eth_epp > 1 | eth_epp < -1)
+  filter(btc_epp > 1 | btc_epp < -1 | eth_epp > 1 | eth_epp < -1)
 
 ```
 
@@ -363,8 +362,7 @@ ticks <- ticks %>% mutate(tick_spacing = (TICK_UPPER - TICK_LOWER)/60)
 ethbtc <- merge(ethbtc, ticks, all.x = TRUE, by = "unique_id")
 
 ethbtc_sig_change <- ethbtc %>% 
-  filter(btc_epp > 1 | btc_epp < -1) %>% 
-  filter(eth_epp > 1 | eth_epp < -1)
+  filter(btc_epp > 1 | btc_epp < -1 | eth_epp > 1 | eth_epp < -1)
 
 ```
 
@@ -460,8 +458,7 @@ NF_POSITION_MANAGER_ADDRESS--TICK_LOWER--TICK_UPPER.
 ethbtc$vault <- ifelse(grepl("^0x", ethbtc$unique_id), "Vault", "Individual")
 
 ethbtc_sig_change <- ethbtc %>% 
-  filter(btc_epp > 1 | btc_epp < -1) %>% 
-  filter(eth_epp > 1 | eth_epp < -1)
+  filter(btc_epp > 1 | btc_epp < -1 | eth_epp > 1 | eth_epp < -1)
 ```
 
 
@@ -512,10 +509,10 @@ plot_ly(ethbtc_sig_change, x = ~eth_epp, color = ~vault, type = "histogram", nbi
 
 # Is there a winning Strategy?
 
-What would be most interesting, would be to find a pattern among short lifespan positions that were profitable, since annualize, the same profit percentage is better when it is accumulated in shorter time spans.
+What would be most interesting, would be to find a pattern among short lifespan positions that were profitable, since annualized, the same profit percentage is better when it is accumulated in shorter time spans.
 
 Labeling positions with > 1% ETH denominated Economic Profit over HODL with a lifespan under 100,000 blocks (~ 2 weeks)
-we can see if there are any discernable differences in this "Elite" population relative to similar "Burst" positions of the same lifespan.
+we can see if there are any discernible differences in this "Elite" population relative to similar "Burst" positions of the same lifespan.
 
 ```{r}
 
@@ -537,12 +534,15 @@ key_scatter(ethbtc_sig_change, x = "lifespan", y = "eth_epp",
 
 ## Start Block 
 
-Looking across all positions `r sum(ethbtc$elite)` (`r round(100*sum(ethbtc$elite)/nrow(ethbtc), 2)`%) meet the criteria for elite. One positive is that they have been opened throughout the time period of interest which may indicate it is possible to create such positions regardless of the broader macro environment.
-
 ```{r}
 ethbtc <- ethbtc %>% mutate(
   elite = (lifespan <= 100000 & eth_epp > 1)
 )
+```
+
+Looking across all positions `r sum(ethbtc$elite)` (`r round(100*sum(ethbtc$elite)/nrow(ethbtc), 2)`%) meet the criteria for elite. One positive is that they have been opened throughout the time period of interest which may indicate it is possible to create such positions regardless of the broader macro environment.
+
+```{r}
 
 key_scatter(ethbtc, x = "start_block", y = "eth_epp",
             xlab = "Position Opening Block",
