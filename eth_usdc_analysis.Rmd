@@ -91,8 +91,8 @@ how Breakeven, Profit, and Loss are applied in nuanced situations.
 ```{r}
 reactable(
   data.frame(
-    pnl_usdc_terms = c(-1, -1, -1, 0, 0,  0, 1, 0,  1),
-    pnl_eth_terms = c(-1,  0,  1, -1, 0, 1, 1, 1, -1)
+    pnl_usdc_terms = c(-1, -1, -1, 0, 0,  0, 1,  1),
+    pnl_eth_terms = c(-1,  0,  1, -1, 0, 1, 1,  -1)
   ) %>% mutate(
     pnl = case_when(
       pnl_usdc_terms == 0 & pnl_eth_terms == 0 ~ "Breakeven",
@@ -159,7 +159,7 @@ key_barchart(ethusdc$pnl, title = "Position Resulting Profit & Loss Category")
 PnL is useful, but in general what most interests Uniswap v3 participants is 
 whether participating in the strategy beats the *opportunity cost* of not participating.
 
-If I start with 100,000 USDC and 50 ETH and end up with 150,250 BTC and 40.1 ETH after withdrawing from a strategy and collecting my fees- am I better off?
+If I start with 100,000 USDC and 50 ETH and end up with 150,250 USDC and 40.1 ETH after withdrawing from a strategy and collecting my fees- am I better off?
 
 PnL integrates price changes like traditional accounting. HODL Reference Value and Strategy 
 Reference Value use a single point in time price (the price as of Position Closure) to assess 
@@ -171,7 +171,7 @@ ethusdc <- ethusdc %>% mutate(
   strat = case_when(
     strat_usdc_terms == hodl_usdc_terms & strat_eth_terms == hodl_eth_terms ~ "Breakeven",
     strat_usdc_terms <= hodl_usdc_terms & strat_eth_terms <= hodl_eth_terms ~ "Both Strategy Loss",
-    strat_usdc_terms > hodl_usdc_terms & strat_eth_terms <= hodl_eth_terms ~ "BTC Strat Gain Only",
+    strat_usdc_terms > hodl_usdc_terms & strat_eth_terms <= hodl_eth_terms ~ "USD Strat Gain Only",
     strat_usdc_terms <= hodl_usdc_terms & strat_eth_terms > hodl_eth_terms ~ "ETH Strat Gain Only",
     strat_usdc_terms > hodl_usdc_terms & strat_eth_terms > hodl_eth_terms ~ "Both Strategy Profit"
   )
@@ -195,7 +195,7 @@ key_barchart(ethusdc$strat, xlab = "Result", "Count", title = "Distribution of E
 The distribution of how much profiteers profited is important for understanding how to 
 replicate these results. In each asset terms the Strategy Value - the HODL Value, divided by the 
 HODL value, times 100 to get to percentage, is considered the Economic Profit Percent (EPP) which is 
-measured in both BTC and ETH terms separately.
+measured in both USDC and ETH terms separately.
 
 ```{r}
 ethusdc <- ethusdc %>% mutate(
@@ -208,14 +208,12 @@ ethusdc <- ethusdc %>% mutate(
 ethusdc[is.na(ethusdc)] <- 0
 
 ethusdc_sig_change <- ethusdc %>% 
-  filter(usdc_epp > 1 | usdc_epp < -1) %>% 
-  filter(eth_epp > 1 | eth_epp < -1)
+  filter(usdc_epp > 1 | usdc_epp < -1 | eth_epp > 1 | eth_epp < -1) 
 
 ```
 
 
-- `r sum(ethusdc$usdc_epp > 1 | ethusdc$usdc_epp < -1)` of the `r nrow(ethusdc)` (
-`r round(sum(ethusdc$usdc_epp > 1 | ethusdc$usdc_epp < -1)/nrow(ethusdc) * 100, 2)`%)
+- `r sum(ethusdc$usdc_epp > 1 | ethusdc$usdc_epp < -1)` of the `r nrow(ethusdc)` (`r round(sum(ethusdc$usdc_epp > 1 | ethusdc$usdc_epp < -1)/nrow(ethusdc) * 100, 2)`%)
 had their USDC denominated Strategy Value within -1% to 1% from their HODL value.
 - There is a `r cor(ethusdc$usdc_epp, ethusdc$eth_epp)` correlation between Economic Profit in ETH terms and USD terms. This makes sense as generally a strategy is either net winning or net losing given a single point in time price.
 
@@ -228,7 +226,7 @@ key_histogram <- function(tbl, percent_col1, percent_col2,
                           p1name, p2name, xlab = "Result", ylab = "Count",
                           title){
   plot_ly(alpha = 0.45, data = tbl, 
-          nbinsx = 100, 
+          nbinsx = 200, 
           x = tbl[[percent_col1]],
           type = "histogram",
           name = p1name) %>%
@@ -250,3 +248,641 @@ key_histogram(tbl = ethusdc_sig_change,
   
 ```
 
+
+# Position Characteristics by Profitability
+
+Moving forward to identify characteristics of positions with (1) Significant Difference 
+between Strategy and HODL values (1% or more in either direction) specifically in ETH 
+terms across a variety of measures.
+
+```{r}
+get_start <- function(unique_id){
+  min(ethusdc_accounts[[unique_id]]$BLOCK_NUMBER)
+}
+
+get_end <- function(unique_id){
+  max(ethusdc_accounts[[unique_id]]$BLOCK_NUMBER)
+}
+
+ethusdc <- ethusdc %>% 
+  group_by(unique_id) %>% 
+  mutate(
+    start_block = get_start(unique_id),
+    end_block = get_end(unique_id)
+  ) %>% 
+  mutate(
+    lifespan = end_block - start_block + 1
+  )
+
+ethusdc_sig_change <- ethusdc %>% 
+    filter(usdc_epp > 1 | usdc_epp < -1 | eth_epp > 1 | eth_epp < -1) 
+
+```
+
+
+## Start Block
+
+It takes time to accrue fees, with only `r sum(ethusdc_sig_change$eth_epp >= 10 & ethusdc_sig_change$start_block >= 13917000)` positions starting in 2022 closing with 10%+ in Economic Profit Percentage; and 
+ `r sum(ethusdc_sig_change$eth_epp >= 5 & ethusdc_sig_change$start_block >= 13917000)` getting 
+ at least 5%.
+```{r}
+key_scatter <- function(tbl, x, y, xlab, ylab, title, name = "Positions"){
+ 
+  plot_ly(tbl, x = tbl[[x]], y = tbl[[y]], type = "scatter", mode = "markers", name  = name) %>% 
+    layout(
+      title = list(text = title, y = 0.975),
+      xaxis = list(title = xlab),
+      yaxis = list(title = ylab)
+    )
+    
+}
+
+key_scatter(ethusdc, x = "start_block", y = "eth_epp",
+            xlab = "Position Opening Block",
+            ylab = "ETH % Gain over HODL",
+            title = "Only 50 positions w/ >10% Gains Opened in 2022") %>% 
+  add_lines(x = 13917000, y = c(-30, 30), name = "Jan 1, 2022")
+
+```
+
+## End Block
+
+Again, as expected more time to accrues fees is important. A deeper dive into Lifespans 
+will follow. There does seem to be a lot of cutting losses and closed positions in 2022. 
+Likely due to ETH's price falling 70%+ over the period of study. As positions fall (downward) out of range, 
+they become 100% in ETH and stop accruing fees which can worsen divergent loss.
+
+In conversation with Uniswap's Research team, it is important to note many of these ETH-USDC positions
+are done by professional market makers who take the opposite strategy (seeking to be "delta neutral") on central exchanges. So highly 
+negative ETH % Gain over HODL may be countered by gains elsewhere. 
+
+This is out of scope of this analysis since it is hypothetical and needed data would not be available on-chain, but nonetheless
+is important context for those interested in participating in Uniswap and using this analysis as information.
+
+```{r}
+
+key_scatter(ethusdc, x = "end_block", y = "eth_epp",
+            xlab = "Position Closing Block",
+            ylab = "ETH % Gain over HODL",
+            title = "Profitability by Position Closing Block") %>% 
+  add_lines(x = 13917000, y = c(-30, 30), name = "Jan 1, 2022")
+
+```
+
+
+## Lifespan
+
+### Note on Just In Time Liquidity 
+
+```{r}
+jit <- ethusdc[ethusdc$lifespan == 1, ]
+
+```
+
+For clarity on the phenomenon of Just In Time (JIT) Liquidity: of all positions 
+`r sum(ethusdc$lifespan == 1)` lasted only a single block. Only `r sum(ethusdc_sig_change$lifespan == 1)` 
+met the condition for significant change (Strategy was at least 1% different from HODL).
+
+Of these JIT positions, `r sum(jit$strat == "Both Strategy Profit")` (a majority) beat HODL. 
+
+JIT represents `r round(100*nrow(jit)/nrow(ethusdc), 2)`% of closed positions, a significant share 
+worth noting.
+
+
+### Overall Lifespan 
+
+Unlike correlated pools, e.g., ETH-WBTC 0.3%, ETH-USDC 0.05% has no clear cut strategy for beating HODL. Patience isn't enough 
+when ETH can fall 70% in under a year.
+
+```{r}
+key_scatter(ethusdc, x = "lifespan", y = "eth_epp",
+            xlab = "Lifespan in # Blocks",
+            ylab = "ETH % Gain over HODL",
+            title = "ETH-USDC 0.05% Pool by Lifespan")
+```
+
+`r sum(ethusdc$eth_epp > 1, ethusdc$lifespan >= 500000)` positions with 500,000+ block lifespans beat HODL 
+by 1% or more; while `r sum(ethusdc$eth_epp < -1, ethusdc$lifespan >= 500000)` lost to HODL by 1% or more.
+
+## Tick Width
+
+Different pools (more specifically different fee tiers) have a different amount of 
+minimum tick spacings that can be used when making a position. For ETH-USDC it is 10, thus 
+all positions are a multiple of 10 ticks apart.
+
+Dividing the tick width by this 10 gets us the tick spacing.
+
+```{r}
+ticks <- unique(lps[ , c("unique_id","TICK_LOWER", "TICK_UPPER")])
+ticks <- ticks %>% mutate(tick_spacing = (TICK_UPPER - TICK_LOWER)/10)
+
+ethusdc <- merge(ethusdc, ticks, all.x = TRUE, by = "unique_id")
+
+ethusdc_sig_change <- ethusdc %>% 
+  filter(usdc_epp > 1 | usdc_epp < -1 | eth_epp > 1 | eth_epp < -1)
+
+```
+
+Among all positions, 10,000 tick spaces covers `r round(ecdf(ethusdc$tick_spacing)(10000) * 100, 2)`% of positions.
+
+Zooming into this section, narrow ranges of < 2000 tick spaces perform chaotically.
+
+```{r}
+key_scatter(tbl = ethusdc, x = "tick_spacing", y = "eth_epp", 
+            xlab = "Tick Spaces",
+            ylab = "ETH % Gain over HODL",
+            title = "Fewer Losers after 2000+ Tick Spaces Wide") %>% 
+  layout(
+    xaxis = list(range = c(0, 10000))
+  )
+
+```
+
+Note: converting tick spaces to USD/ETH price terms doesn't make intuitive sense due to the geometric nature of how Uniswap
+designed ticks to work. The difference between ticks 197340 and 217360 (2002 tick spaces) is 2,328 USD/ETH; while the difference
+between 203390 and 223340 (1995 tick spaces) is 1,270 USD/ETH.
+
+It is best to think of tick spacing as the relative "narrowness" around the price at the time the position 
+was opened.
+
+```{r}
+ethusdc <- ethusdc %>% mutate(
+  lower_tick_price = tick_to_price(ethusdc$TICK_LOWER, decimal_adjustment = 1e12, yx = TRUE),
+  upper_tick_price = tick_to_price(ethusdc$TICK_UPPER, decimal_adjustment = 1e12, yx = TRUE)
+) %>% mutate(
+  range_in_usd = lower_tick_price - upper_tick_price
+)
+
+```
+
+For completeness, here is the same plot with tick_spacing converted to the position specific 
+range in USD/ETH. Ranges of 1,000 USDC/ETH to 11,000 USDC/ETH are very wide (10,000 Range) and somewhat rare. 
+They also perform somewhat chaotically.
+
+```{r}
+key_scatter(tbl = ethusdc, x = "range_in_usd", y = "eth_epp", 
+            xlab = "Tick Spaces as Range in USD/ETH price",
+            ylab = "ETH % Gain over HODL",
+            title = "") %>% 
+  layout(
+    xaxis = list(range = c(0, 20000))
+  )
+
+```
+
+Because wide ranges are at a lower risk of ending up 100% in a single asset they tend to have 
+both lower downside and lower upside risks. Here, positions wider than 2000 tick spaces 
+broke even with HODL on average and median, but had much higher minimums and lower maximums. 
+
+```{r}
+reactable(
+  ethusdc %>% group_by(wider_than_2000 = tick_spacing >= 2000) %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+
+```
+
+
+## Position Size
+
+Looking at Economic Profit as it relates to the size of the position using the HODL ETH 
+Value, `r round(100*sum(ethusdc_sig_change$hodl_eth_terms < 100)/nrow(ethusdc_sig_change), 2)`% of 
+positions were < 100 ETH in size.
+
+Splitting by large (100+ ETH) doesn't show much difference in typical gain (both groups lose on average).
+But larger positions have a smaller range of gains/losses versus HODL possibly indicating more professionality in position creation.
+ 
+```{r}
+reactable(
+  ethusdc %>% group_by(large = hodl_eth_terms >= 100) %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+```
+
+```{r}
+
+key_scatter(tbl = ethusdc, x = "hodl_eth_terms", y = "eth_epp", 
+            xlab = "Position Size in ETH if HODL'd", 
+            ylab = "ETH % Gain over HODL",
+            title = "") %>% 
+  layout(
+    xaxis = list(range = c(0, 500))
+  )
+
+```
+
+## Vault Managed Positions 
+
+Do we see Vaults, like Gamma.xyz outperform on profitability over individually managed positions?
+A vault is identifiable by it's lack of NF Token ID, making its unique_id a concatenation of 
+NF_POSITION_MANAGER_ADDRESS--TICK_LOWER--TICK_UPPER.
+
+```{r}
+
+ethusdc$vault <- ifelse(grepl("^0x", ethusdc$unique_id), "Vault", "Individual")
+
+ethusdc_sig_change <- ethusdc %>% 
+  filter(usdc_epp > 1 | usdc_epp < -1 | eth_epp > 1 | eth_epp < -1)
+```
+
+
+Curiously, although there are `r sum(ethusdc$vault == "Vault")` Vaults overall, 
+only `r sum(ethusdc_sig_change$vault == "Vault")` had significant differences from HODLing the assets 
+(at least 1% difference in either direction).
+
+```{r}
+reactable(
+  ethusdc %>% group_by(vault == "Vault") %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+```
+
+Of the vaults that did result in a noticeable difference from HODLing, they lightly beat individual Uniswap v3 NFT Managed Positions (i.e., Individuals) on average without 
+any of the rare excess wins or losses. 
+
+`r sum(ethusdc_sig_change$vault == "Vault" & ethusdc_sig_change$eth_epp >= 5)` of 
+the positions managed by vaults matched or exceeded +5% of HODL compared to 
+`r sum(ethusdc_sig_change$vault == "Individual" & ethusdc_sig_change$eth_epp >= 5)` individuals.
+
+```{r}
+reactable(
+  ethusdc_sig_change %>% group_by(vault == "Vault") %>% summarise(
+    count = n(),
+    min_gain = min(eth_epp), 
+    median_gain = median(eth_epp),
+    avg_gain = mean(eth_epp),
+    max_gain = max(eth_epp)
+  ) %>% round(., 2)
+)
+
+```
+
+```{r, warning=FALSE}
+plot_ly(ethusdc_sig_change, x = ~eth_epp, color = ~vault, type = "histogram", nbinsx = 200) %>% 
+  layout(
+    xaxis = list(range = c(-10, 10), title = "ETH % Gain over HODL"),
+    title = list(text = "Vaults generally match HODL \n (-1%,1%) removed", y = 0.975)
+  )
+
+```
+
+
+# Is there a winning Strategy?
+
+What would be most interesting, would be to find a pattern among short lifespan positions that were profitable, since annualized, the same profit percentage is better when it is accumulated in shorter time spans.
+
+Labeling positions with > 1% ETH denominated Economic Profit over HODL with a lifespan under 100,000 blocks (~ 2 weeks)
+we can see if there are any discernible differences in this "Elite" population relative to similar "Burst" positions of the same lifespan.
+
+```{r}
+
+key_scatter(ethusdc_sig_change, x = "lifespan", y = "eth_epp",
+            xlab = "Lifespan in # Blocks",
+            ylab = "ETH % Gain over HODL",
+            title = "Short positions generally lose, is there a pattern for winners?",
+            name = "Burst Positions") %>% 
+  add_trace(data = ethusdc_sig_change %>% filter(lifespan <= 100000 & eth_epp > 1), 
+            x = ~lifespan, y = ~eth_epp, type = "scatter", mode = "markers", name = "Elite Bursts") %>%
+  layout(
+    xaxis = list(range = c(0, 100000)),
+    yaxis = list(range = c(-10, 10))
+  )
+
+```
+
+
+# Elite "Burst" Positions
+
+```{r}
+ethusdc <- ethusdc %>% mutate(
+  elite = (lifespan <= 100000 & eth_epp > 1)
+)
+```
+
+## Start Block 
+
+Looking across all positions `r sum(ethusdc$elite)` (`r round(100*sum(ethusdc$elite)/nrow(ethusdc), 2)`%) meet the criteria for elite. One positive is that they have been opened throughout the time period of interest which may indicate it is possible to create such positions regardless of the broader macro environment.
+
+```{r}
+
+key_scatter(ethusdc, x = "start_block", y = "eth_epp",
+            xlab = "Position Opening Block",
+            ylab = "ETH % Gain over HODL",
+            title = "Elite positions found throughout ETHUSDC History") %>% 
+  add_trace(data = ethusdc %>% filter(lifespan <= 100000 & eth_epp > 1), 
+            x = ~start_block, y = ~eth_epp, type = "scatter", mode = "markers", name = "Elite") %>% 
+  add_lines(x = 13917000, y = c(-30, 30), name = "Jan 1, 2022")
+
+```
+
+## Tick Width
+
+Curiously, only `r sum(ethusdc$elite == TRUE & ethusdc$tick_spacing > 2000)` elite positions exceed
+2000 tick spacings.
+
+This indicates strategic use of liquidity, by concentrating liquidity they can accrue a larger 
+share of fees, at the risk of overselling the winning asset over the position lifespan.
+
+```{r}
+
+key_scatter(tbl = ethusdc, x = "tick_spacing", y = "eth_epp", 
+            xlab = "Tick Spaces",
+            ylab = "ETH % Gain over HODL",
+            title = "The Elite positions are considerably narrow") %>% 
+    add_trace(data = ethusdc %>% filter(lifespan <= 100000 & eth_epp > 1), 
+            x = ~tick_spacing, y = ~eth_epp, type = "scatter", mode = "markers", name = "Elite") %>% 
+  layout(
+    xaxis = list(range = c(0, 10000))
+  )
+
+```
+
+## Position Size 
+
+In (HODL) ETH terms, elite positions are typically tightly scoped which may 
+indicate large market makers are purposefully wide and under-performant to reduce risks of divergent loss.
+
+Making these elite positions high risk, high reward and thus lower in size.
+
+```{r}
+
+reactable(
+    ethusdc %>% group_by(elite) %>% summarise(
+        count = n(),
+        min_size = min(hodl_eth_terms), 
+        median_size = median(hodl_eth_terms),
+        avg_size = mean(hodl_eth_terms),
+        max_size = max(hodl_eth_terms)
+    ) %>% round(., 2)
+)
+
+
+```
+
+## Model Differences
+
+Looking at positions under 100,000 block lifespan and 2000 tick spacing ("Burst" positions), is there any discernible, reproducible, know-able difference between the elite burst positions (> 1% economic profit vs HODL) and other burst positions?
+
+```{r}
+burst <- ethusdc %>% filter(lifespan <= 100000, tick_spacing <= 2000)
+burst_sig_change <- ethusdc_sig_change %>% filter(lifespan <= 100000, tick_spacing <= 2000)
+```
+
+Burst positions make up `r round(100*nrow(burst)/nrow(ethusdc), 2)`% of all closed positions historically, 
+indicating many liquidity providers are making an effort to extract their gains quickly with concentrated positions to accrue more fees. 
+
+This may be counter-intuitive. As the prevailing opinion is that ETH and USDC are by definition *un*correlated assets, so their relative values are very volatile. Making concentration risky as your position quickly sells the winner to buy the loser. In conversation with other Uniswap Researchers, they note that the large amount of losers in Uniswap v3 ETH-USDC may in fact be those performing "delta-neutral" strategies between DeFi and Central Exchanges.
+
+The idea being that while you lose against HODL in Uniswap, you keep your total allocation balanced by buying the rising asset on Central Exchanges to counter Uniswap's AMM.
+
+Because this is implicitly off-chain information it is not analyzed further here. But it is useful nuance for understanding why some of the biggest losing positions against HODL made it so far into the negative. 
+
+An immediately apparent stat is that these burst positions make up `r round(100*nrow(burst_sig_change)/nrow(ethusdc_sig_change), 2)`% of positions with at least a 1% difference 
+in Economic Profit (Strategy vs HODL in either direction), indicating they are disproportionately a "wash" in 
+being almost equal to HODLing.
+
+This would align with the "delta neutral" nuance noted by other researchers, and may be a positive sign if burst positions have a lower downside risk that longer held positions.
+
+```{r}
+
+plot_ly(alpha = 0.45,
+        data = ethusdc %>% filter(lifespan > 100000 | tick_spacing > 2000),
+        x = ~eth_epp,
+        nbinsx = 200,
+        name = "Non-Burst",
+        type = "histogram"
+) %>%
+  add_histogram(data = ethusdc %>% filter(lifespan <= 100000 & tick_spacing <= 2000),
+                nbinsx = 100,
+                x = ~eth_epp,
+                name = "Burst Positions") %>%
+  layout(
+    barmode = "overlay",
+    title = list(text = "", y = 0.975),
+    xaxis = list(title = "ETH % Gain over HODL", range = c(-20,20)),
+    yaxis = list(title = "# Positions", range = c(0, 2500))
+  )
+
+```
+
+At a cursory glance burst positions do seem to have higher minimums and lower maximums.
+
+```{r}
+
+reactable(
+    ethusdc %>% group_by(burst = lifespan <= 100000 & tick_spacing <= 2000) %>% summarise(
+      count = n(),
+      min_gain = min(eth_epp), 
+      median_gain = median(eth_epp),
+      avg_gain = mean(eth_epp),
+      max_gain = max(eth_epp)
+    ) %>% round(., 2)
+)
+
+```
+
+Among the `r nrow(burst)` burst positions `r sum(burst$elite)`, 
+(`r round(100 * sum(burst$elite)/nrow(burst), 2)`%) are elite. This is highly unbalanced.
+It is possible this is pure dumb luck.
+
+Using a simple logistic regression let's see if within this short lifespan and narrow range 
+of positions, if local differences in lifespan, spacing, and position size are useful in assessing the 
+probability of a position being elite among the burst positions (<= 100,000 blocks & <= 2000 tick spaces).
+
+```{r}
+model1 <- glm(elite ~ lifespan + tick_spacing + hodl_eth_terms, 
+    family = binomial(), data = burst)
+
+summary(model1)
+
+```
+
+The model identifies lifespan, position width, and position size as all "statistically significant" 
+coefficients for burst positions. 
+
+- By default, the odds of a burst position being elite are ~7.4%
+- Increasing the lifespan by 1 block adds a very small chance of being elite, this make sense as you need time to accrue fees.
+- Increasing the tick spacing (1 unit = 10 tick width in this pool) reduces the marginal probability 
+of being elite; implying that *reducing* the tick spacing has a small marginal improvement to the chance of being elite. This makes sense as it increases your effective (concentrated) liquidity.
+- Having a 1 ETH larger position has a very small reduction in the probability of being elite, which makes sense as we saw elite positions were on average 95%+ smaller than non-elite positions. Probably more of a data artifact than a usable insight though.
+
+```{r}
+
+probability <- function(val){
+  exp(val)/(1 + exp(val))
+}
+
+reactable(
+  data.frame(
+    marginal_probability_elite = 100*probability(model1$coefficients)
+  ) %>% round(., 4)
+)
+
+```
+
+
+Loosening the definition of "elite" to just any profitable burst, let's see if a simple 
+logistic regression can identify any local indicators. 
+
+```{r}
+
+burst <- burst %>% mutate(profitable = eth_epp > 0)
+
+```
+
+Of the `r nrow(burst)` burst positions (again, <= 100,000 blocks and <= 2,000 tick spaces), `r sum(burst$profitable)` 
+(`r round(100 * sum(burst$profitable)/nrow(burst), 2)`)% were profitable over HODL.
+
+This is a large increase in the target data. 
+
+```{r}
+model2 <- glm(profitable ~ lifespan + tick_spacing + hodl_eth_terms, 
+    family = binomial(), data = burst)
+
+summary(model2)
+
+```
+
+When looking at the looser group of any profitable position over HODL among burst positions
+Everything becomes essentially pure luck.
+
+- By default, profitability is 55.9% likely.
+- Knowing that 56.21% of positions were profitable in the data, there just isn't much 
+variance left for lifespan, position width and position size to explain.
+
+```{r}
+reactable(
+  data.frame(
+    marginal_profitability = 100*probability(model2$coefficients)
+  ) %>% round(., 4)
+)
+
+```
+
+## Checking Log Concavity
+
+It may be that 2,000 tick spaces is too large a cutoff. In the ETH-WBTC Analysis, 
+a (only marginally!) narrower 200 tick spaces was used instead for understanding burst positions. 
+
+That pool's minimum tick width is 60 unlike ETH-USDC's 10, and those assets are correlated so a direct comparison of narrowness is not appropriate.
+
+Removing positions that exactly matched HODL (required to log) and reviewing the log of ETH % Gain over HODL there may be some concavity in gains at more narrow tick spacings, 
+especially around 100 spacings where the LOESS smooth line peaks at a (un-log'd) 0.86% profitable over HODL.
+
+```{r, warning = FALSE, message = FALSE}
+ggplotly(
+  ggplot(data = burst, aes(x = tick_spacing, y = log(eth_epp))) + 
+           geom_point() + 
+           geom_smooth(se = FALSE) + 
+           theme_classic()
+  ) %>% 
+  layout(
+    xaxis = list(title = "Tick Spacing"), 
+    yaxis = list(title = "LOG ETH % Gain over HODL"), 
+    title = list(text = "Visible Concavity in Very Narrow Positions", y = 0.975)
+  )
+
+```
+
+# Conclusion 
+
+## Very Different than ETH-WBTC
+
+The ETH-WBTC 0.3% pool analysis has much more actionable results. JIT was much less 
+prevalent and because that pool is more correlated it is more clear that low risk profit is available with patience. 
+
+This pool is more chaotic and even position > 2 million blocks (10+ months) have some 
+losses versus HODL.
+
+```{r}
+key_scatter(ethusdc, x = "lifespan", y = "eth_epp",
+            xlab = "Lifespan in # Blocks",
+            ylab = "ETH % Gain over HODL",
+            title = "ETH-USDC 0.05% Pool by Lifespan")
+```
+
+## JIT is probably exaggerated
+
+1 Block positions, as expected, generally use the narrowest possible range (1 tick space).
+These positions beat HODL in ETH terms `r round(100 * sum(ethusdc[ethusdc$lifespan == 1, ]$eth_epp > 0)/nrow(ethusdc[ethusdc$lifespan == 1, ]), 2)`% of the time.
+
+When annualized, gaining the median `r round(100 * median(ethusdc[ethusdc$lifespan == 1, ]$eth_epp), 2)`% can seem sky high, but curiously the average gain against HODL is actually `r round(100 * mean(ethusdc[ethusdc$lifespan == 1, ]$eth_epp), 2)`%. 
+
+JIT is no guarantee, it is probably best to consider these quirky evidence of 
+on-chain order book filling via the memory pool than a threat to the system.
+
+```{r}
+
+key_scatter(tbl = ethusdc[ethusdc$lifespan == 1, ], 
+            x = "tick_spacing", y = "eth_epp", 
+            xlab = "Tick Spaces of 1-Block Lifespan Positions",
+            ylab = "ETH % Gain over HODL",
+            title = "1-Block Positions are not guaranteed to beat HODL") %>% 
+  layout(
+    xaxis = list(range = c(0, 20))
+  )
+
+```
+
+## Participants size for risk
+
+The elite positions: over 1% gain against HODL in <= 100,000 blocks with <= 2,000 tick spaces are 50% smaller than non-elite positions at the median.
+
+## Professionals are Active
+
+Going 1 layer behind the Uniswap v3 positions there are some experts who consistently 
+create elite positions.
+
+```{r}
+
+lps_lp <- lps %>% filter(unique_id %in% ethusdc$unique_id) %>% select(unique_id, LIQUIDITY_PROVIDER) %>% distinct()
+
+all_ <- merge(ethusdc, lps_lp, all.x = TRUE, all.y = TRUE, by = "unique_id") 
+ 
+experts <- all_ %>% 
+  filter(elite == TRUE)
+
+atable <- as.data.frame(table(all_$LIQUIDITY_PROVIDER))
+colnames(atable) <- c("individual_lp", "num_positions")
+
+etable <- as.data.frame(table(experts$LIQUIDITY_PROVIDER))
+colnames(etable) <- c("individual_lp", "num_elites")
+
+
+etable <- merge(etable, atable, all.x = TRUE, by = "individual_lp")
+
+etable$elite_percent <- round(100*etable$num_elites/etable$num_positions, 2)
+
+reactable(
+  etable[order(etable$num_elites, decreasing = TRUE), ]
+)
+
+```
+
+The `r length(unique(etable$individual_lp))` individual Liquidity Providers are associated with 
+`r sum(etable$num_elites)` elite positions, this is because positions in NFT form are transferable, so they may be buying and selling the same `r sum(length(unique(experts$unique_id)))` unique positions.
+
+More interestingly there are `r as.numeric(etable %>% filter(num_elites > 1) %>% summarise(length(unique(individual_lp))))` repeat elite position liquidity providers.
+
+These repeat experts are real outliers with a median of `r as.numeric(etable %>% filter(num_elites > 1) %>% summarise(median(elite_percent)))`% of their positions created being elite (note: there may be a small number of double counting for positions that are transferred).
+
+Comparing this to the 7.4% model intercept for the probability of a position being Elite, 
+one could argue that `r round(100*as.numeric(etable %>% filter(num_elites > 1) %>% summarise(length(unique(individual_lp))))/length(unique(lps$LIQUIDITY_PROVIDER)), 2)`% of all liquidity providers are ~3x+ as skilled as the average liquidity provider.
