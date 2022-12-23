@@ -178,7 +178,6 @@ strategy_reference <- function(id_accounting, t0col, t1col, price_col, price_bas
   
 }
 
-
 get_eth_price <- function(min_block, max_block, api_key){
   price_query <- {
     "
@@ -271,7 +270,6 @@ ORDER BY BLOCK_NUMBER DESC
   
   prices = auto_paginate_query(price_query, api_key = api_key)
 }
-
 
 market_eth_price_at_block <- function(eth_prices, block){
   eth_prices[eth_prices$BLOCK_NUMBER == block, "ETH_MARKET_PRICE"]

@@ -1,0 +1,112 @@
+
+@import url('https://fonts.googleapis.com/css?family=Inter');
+@import url('https://fonts.googleapis.com/css?family=Roboto+Mono');
+
+body {
+  background-color: #10151A;
+    background-position: center top;
+  background-size: 300px 117px;
+  padding-left: 10%;
+  padding-right: 10%;
+  color: #C4CDD5;
+    font-size: 18px;
+  font-weight: 400;
+  font-family: Inter;
+  margin-top: 10px;
+}
+
+hr {
+  width: 85%;
+  color: #C4CDD5;
+}
+
+.tocify {
+  background-color: #10151A;
+    font-size: 14px;  
+  color: #C4CDD5;
+    border: 0;
+}
+
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+  background-color: #DC4F9C;
+    border-color: #DC4F9C;
+}
+
+.list-group-item {
+  background-color: #10151A;
+}
+
+h1 {
+  font-size: 1.4em;
+  padding-top: 10px;
+  color: #DC4F9C;
+}
+
+h2 {
+  font-size: 1.1em;
+  padding-top: 10px;
+  color: #6FCCDD;
+}
+
+h3 {
+  font-size: 1.1em;
+  padding-top: 10px;
+  color: white;
+}
+
+.plotly {
+  margin: 30px;
+}
+
+.rt-page-button-current  {
+  color: #FFF;
+}
+.rt-thead {
+  background-color: #10151A;
+    color: #FFFFFF;
+    text-align: center;
+  vertical-align: middle;
+}
+
+.rt-th-content {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ReactTable {
+  background-color: #171e25;
+    color: #C4CDD5;
+    border: none;
+  font-family: Roboto Mono;
+  font-size: 0.8em;
+}
+
+.rt-th {
+  border: 0px solid #000000 !important;
+  padding-top: 15px;
+  padding-bottom: 15px;
+  font-weight: 400;
+  font-family: Inter;
+}
+.rt-tr {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.rt-pagination {
+  margin: 0;
+  background: #171e25;
+    opacity: 0.5;
+  border-bottom: 1px solid #C4CDD5;
+  border-top: 1px solid #C4CDD5;
+}
+
+.btn {
+  color: #FFF;
+    background: none;
+  border: none;
+  padding: 0;
+}
+
+#TOC {
+margin: 71px 0px 20px 0px;
+}

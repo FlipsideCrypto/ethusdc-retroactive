@@ -1,0 +1,13 @@
+name: ethbtc_retroactive
+title: ethbtc_retroactive
+username: carlos_mercado
+account: carlos_mercado
+server: science.flipsidecrypto.xyz
+hostUrl: https://science.flipsidecrypto.xyz/__api__
+appId: 225
+bundleId: 719
+url: https://science.flipsidecrypto.xyz/content/349dd39e-96cb-4b7b-80fb-b45c1618455c/
+when: 1671818356.54021
+lastSyncTime: 1671818356.54023
+asMultiple: FALSE
+asStatic: TRUE
